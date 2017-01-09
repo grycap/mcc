@@ -1,6 +1,74 @@
 #!/bin/bash
+declare UNDO_CMDS=()
+EXECUTE_COMMANDS=True
+
+function retry_while() {
+    local n=1
+    local max=$1
+    local str_condition=$2
+    local delay=2
+    shift
+    shift
+    while true; do
+        STR_RET=$($@)
+        if [ $? -ne 0 -o "$STR_RET" == "$str_condition" ]; then
+            ((n++))
+            if [ $n -le $max ]; then
+                sleep $delay
+            else
+                return -1
+            fi
+        else
+            echo "$STR_RET"
+            return 0
+        fi
+    done
+}
+
+function get_container_ip() {
+    local C_NAME=$1
+    local ADDR_IP
+
+    ADDR_IP=$(curl -s -XGET --unix-socket /var/lib/lxd/unix.socket http:/1.0/containers/$C_NAME/state | jq '.metadata.network["eth0"].addresses[] | select(."family"=="inet") | .address' 2> /dev/null)
+    if [ $? -ne 0 ]; then
+        return 1
+    fi    
+    echo "$ADDR_IP" | tr -d '"'
+    return 0
+}
+
+function retry_execute_command {
+    local n=1
+    local max=5
+    local delay=2
+    while true; do
+        execute_command "$@" && return $? || {
+            if [[ $n -lt $max ]]; then
+                ((n++))
+                sleep $delay;
+            else
+                return -1
+            fi
+        }
+    done
+}
+
+function execute_command() {
+    if [ "$EXECUTE_COMMANDS" == "True" ]; then
+        $@
+        return $?
+    else
+        p_cmd "$@"
+        return 0
+    fi
+}
+
 function usage() {
     echo "uso: $0 $1"
+}
+
+function p_cmd() {
+    echo "[CMD] $@"
 }
 
 function p_debug() {
@@ -21,58 +89,229 @@ function launch_node() {
     echo
 }
 
-function nw_exists() {
-    local ERR RESULT
-    local NW_NAME=$1
-    local ALERT_IF_ERRORS=$2
-    local MSG_EXIST=$3
-    local MSG_NOT_EXIST=$4
+function add_undo_cmdline() {
+    UNDO_CMDS="${UNDO_CMDS}$@
+"
+}
 
-    if [ "$NW_NAME" == "" ]; then
-        if [ "$ALERT_IF_ERRORS" == "True" ]; then
-            p_error "you have to provide a name for the network"
-        fi
-        return 2
-    fi
-
-    ERR=$(lxc network show "$NW_NAME" 2>&1)
-    RESULT=$?
-
-    if [ $RESULT -eq 0 ]; then
-        if [ "$ALERT_IF_ERRORS" == "True" ]; then
-            p_error_s "$MSG_EXIST"
-        fi
-        return 0
-    else
-        if [ "$ALERT_IF_ERRORS" == "True" ]; then
-            p_error_s "$MSG_NOT_EXIST"
-        fi
-        return 1
-    fi
+function execute_undo_cmds() {
+    while read LINE; do
+        retry_execute_command "$LINE"
+    done <<< "$(echo "${UNDO_CMDS}" | tac - | tail -n +2)"
 }
 
 function ensure_network_exists() {
     local NETWORKNAME=$1
     local CREATENETWORK=$2
 
-    if nw_exists "$NETWORKNAME" "False"; then
+    if [ "$NETWORKNAME" == "" ]; then
+        p_error "network name is blank"
+        return 3
+    fi
+
+    curl -sf -XGET --unix-socket /var/lib/lxd/unix.socket http:/1.0/networks/$NETWORKNAME > /dev/null 2> /dev/null
+
+    if (( $? == 0 )); then
         p_debug "network $NETWORKNAME exists"
         return 0
     else
-        if [ "$CREATENETWORK" != "True"]; then
+        if [ "$CREATENETWORK" != "True" ]; then
             p_error "network $NETWORKNAME does not exist"
             return 1
         else
             p_debug "creating network $NETWORKNAME"
-            ERR=$(lxc network create "$NETWORKNAME" 2>&1)
+            ERR=$(execute_command lxc network create "$NETWORKNAME" 2>&1)
             RESULT=$?
 
             if [ $? -ne 0 ]; then
                 p_error "failed to create network $NETWORKNAME ($ERR)"
                 return 2
             fi 
+            add_undo_cmdline lxc network delete "$NETWORKNAME"
             return 0
         fi
+    fi
+}
+
+function ensure_image_exists() {
+    local IMAGENAME=$1
+
+    if [ "$IMAGENAME" == "" ]; then
+        p_error "image name is blank"
+        return 2
+    fi
+
+    local ERR RESULT
+    ERR=$(execute_command lxc image show $IMAGENAME)
+    RESULT=$?
+
+    if [ $RESULT -ne 0 ]; then
+        p_error "image $IMAGENAME does not exist"
+        return 1
+    else
+        p_debug "using image $IMAGENAME"
+        return 0
+    fi
+}
+
+function get_container_list() {
+    local CONTAINER_STR=$(curl -s -XGET --unix-socket /var/lib/lxd/unix.socket http:/1.0/containers | jq ".metadata[]" | tr -d '"')
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+
+    local CNAME
+    while read CNAME; do
+        CNAME="${CNAME:16}"
+        if [ "${CNAME:0:4}" == "mlc-" ]; then
+            echo "$CNAME"
+        fi
+    done <<< "$CONTAINER_STR"
+    return 0
+}
+
+function ensure_container_not_exists() {
+    local C_NAME=$1
+
+    if [ "$C_NAME" == "" ]; then
+        p_error "container name is blank"
+        return 1
+    fi
+
+    curl -sf -XGET --unix-socket /var/lib/lxd/unix.socket http:/1.0/containers/$C_NAME > /dev/null 2> /dev/null
+    if (( $? == 0 )); then
+        p_error "container already exists"
+        return 2
+    fi
+
+    return 0
+}
+
+function get_cluster_list() {
+    local CONTAINER_STR="$(get_container_list)"
+    if [ $? -ne 0 ]; then
+        p_error "could not get the list of containers"
+        return 1
+    fi
+    local CNAME CNAME_C
+    while read CNAME; do
+        CNAME_C="${CNAME/mlc-*-/}"
+        if [ "$CNAME_C" == "$CNAME" ]; then
+            echo "$CNAME"
+        fi
+    done <<< "$CONTAINER_STR"
+    return 0
+}
+
+function launch_container() {
+    local C_NAME=$1
+    local C_IMAGE=$2
+    local C_NETWORK=$3
+
+    ensure_container_not_exists "$C_NAME" || return 1
+    ensure_network_exists "$C_NETWORK" "False" || return 2
+    ensure_image_exists "$C_IMAGE" || return 3
+
+    ERROR=$(execute_command lxc launch -n "$C_NETWORK" -e $C_IMAGE "$C_NAME" > /dev/null)
+
+    if (( $? == 0 )); then
+        p_debug "container $C_NAME successfully launched"
+        # As we are using ephemeral containers, we do not need to delete them
+        # add_undo_cmdline lxc delete "$CLUSTERNAME"
+        add_undo_cmdline lxc stop "$C_NAME"
+        return 0
+    else
+        return 1
+    fi
+}
+
+function get_nodes_of_cluster() {
+    local CLUSTER_NAME=$1
+    local CONTAINER_STR=$(get_container_list)
+    if [ $? -ne 0 ]; then
+        p_error "could not get the list of containers"
+        return 1
+    fi
+    local CNAME CNAME_C
+    while read CNAME; do
+        CNAME_C="${CNAME/$CLUSTER_NAME-/}"
+        if [ "${CNAME_C:0:4}" == "node" ]; then
+            echo "$CNAME"
+        fi
+    done <<< "$CONTAINER_STR"
+    return 0
+}
+
+function addnode() {
+    local CLUSTERNAME=
+    local NODECOUNT=1
+    local WNIMAGE=ubuntu:
+    local NETWORKNAME
+
+    while (( $# > 0 )); do
+        case "$1" in
+            --node-count|-n)    NODECOUNT=$2
+                                shift;;
+
+            --working-node-image|-f)    WNIMAGE=$2
+                                        shift;;
+
+            --network-name|-W)          NETWORKNAME=$2 
+                                        shift;;
+
+            *)  if [ "$CLUSTERNAME" == "" ]; then 
+                    CLUSTERNAME=$1
+                else
+                    usage addnode && exit 1
+                fi;;
+        esac
+        shift
+    done
+
+    if [ "$CLUSTERNAME" == "" ]; then
+        p_error "a name for the cluster must be provided"
+        return 1
+    fi
+
+    local CLUSTERS
+    CLUSTERS=$(get_cluster_list)
+    if [ $? -ne 0 ]; then
+        p_error "cluster does not exist"
+        return 2
+    fi
+
+    IP=$(retry_while 3 "" get_container_ip $CLUSTERNAME)
+    if (( $? != 0 )); then
+        p_error "could not get IP address for container"
+        return 3
+    fi    
+
+    p_debug "ip for cluster $CLUSTERNAME is $IP"
+
+    NODES=$(get_nodes_of_cluster $CLUSTERNAME)
+    if (( $? != 0 )); then
+        p_error "could not get the nodes from cluster $CLUSTERNAME"
+        return 4
+    fi
+
+    local NODENAME i
+    for ((i=1;i<1000;i++)); do
+        NODENAME="$(printf "$CLUSTERNAME-node%03d" $i)"
+        if [ "$(echo "$NODES" | grep "$NODENAME")" == "" ]; then
+            break
+        fi
+    done
+    if (( i >= 1000 )); then
+        p_error "could not find a new node name (there are at least 1000 nodes!)"
+        return 5
+    fi
+
+    p_debug "using node name $NODENAME"
+    if launch_container $NODENAME $WNIMAGE $NETWORKNAME; then
+        p_debug "node $NODENAME successfully launched"
+        return 0
+    else
+        p_error "failed to launch node $NODENAME ($?)"
     fi
 }
 
@@ -112,15 +351,29 @@ function create() {
     fi
     p_debug "using network $NETWORKNAME"
 
+    if ! ensure_image_exists "$FRONTENDIMAGE"; then
+        return 3
+    fi
+
     p_debug "creating host $CLUSTERNAME using image $FRONTENDIMAGE"
-    ERROR=$(lxc launch -n "$NETWORKNAME" -e $FRONTENDIMAGE "$CLUSTERNAME" > /dev/null)
+    ERROR=$(execute_command lxc launch -n "$NETWORKNAME" -e $FRONTENDIMAGE "$CLUSTERNAME" > /dev/null)
     SUCCESS=$?
 
-    if (( $SUCCESS == 0 )); then
-        echo "frontend $CLUSTERNAME successfully launched"
-    else
+    if ! launch_container $CLUSTERNAME $FRONTENDIMAGE $NETWORKNAME; then
         p_error "failed to launch frontend $CLUSTERNAME ($ERROR)"
     fi
+
+    return 0
+}
+
+function list() {
+    while (( $# > 0 )); do
+        case "$1" in
+            *) usage create && exit 1;;
+        esac
+        shift
+    done
+    get_container_list    
 }
 
 n=0
@@ -142,7 +395,8 @@ COMMAND=
 while [ $n -lt ${#ARR[@]} -a "$COMMAND" == "" ]; do
     PARAM="${ARR[$n]}"
     case "$PARAM" in
-        create|delete) COMMAND="$PARAM";;
+        list|addnode|create|delete) COMMAND="$PARAM";;
+        --simulate | -s) EXECUTE_COMMANDS=False;;
         --help | -h) usage && exit 0;;
         *) usage && exit 1;;
     esac
@@ -151,6 +405,10 @@ done
 
 if [ "$COMMAND" != "" ]; then
     $COMMAND "${ARR[@]:$n}"
+    if [ $? -ne 0 ]; then
+        echo "trying to undo the commands executed"
+        execute_undo_cmds
+    fi
 else
     echo "no command issued" && usage && exit 1
 fi
