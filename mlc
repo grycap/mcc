@@ -1,0 +1,156 @@
+#!/bin/bash
+function usage() {
+    echo "uso: $0 $1"
+}
+
+function p_debug() {
+    echo "[DEBUG] $@"
+}
+
+function p_error() {
+    echo "[ERROR] $@" >&2
+}
+
+function p_error_s() {
+    if [ "$@" != "" ]; then
+        echo "[ERROR] $@" >&2
+    fi
+}
+
+function launch_node() {
+    echo
+}
+
+function nw_exists() {
+    local ERR RESULT
+    local NW_NAME=$1
+    local ALERT_IF_ERRORS=$2
+    local MSG_EXIST=$3
+    local MSG_NOT_EXIST=$4
+
+    if [ "$NW_NAME" == "" ]; then
+        if [ "$ALERT_IF_ERRORS" == "True" ]; then
+            p_error "you have to provide a name for the network"
+        fi
+        return 2
+    fi
+
+    ERR=$(lxc network show "$NW_NAME" 2>&1)
+    RESULT=$?
+
+    if [ $RESULT -eq 0 ]; then
+        if [ "$ALERT_IF_ERRORS" == "True" ]; then
+            p_error_s "$MSG_EXIST"
+        fi
+        return 0
+    else
+        if [ "$ALERT_IF_ERRORS" == "True" ]; then
+            p_error_s "$MSG_NOT_EXIST"
+        fi
+        return 1
+    fi
+}
+
+function ensure_network_exists() {
+    local NETWORKNAME=$1
+    local CREATENETWORK=$2
+
+    if nw_exists "$NETWORKNAME" "False"; then
+        p_debug "network $NETWORKNAME exists"
+        return 0
+    else
+        if [ "$CREATENETWORK" != "True"]; then
+            p_error "network $NETWORKNAME does not exist"
+            return 1
+        else
+            p_debug "creating network $NETWORKNAME"
+            ERR=$(lxc network create "$NETWORKNAME" 2>&1)
+            RESULT=$?
+
+            if [ $? -ne 0 ]; then
+                p_error "failed to create network $NETWORKNAME ($ERR)"
+                return 2
+            fi 
+            return 0
+        fi
+    fi
+}
+
+function create() {
+    CREATENETWORK=False
+    NODECOUNT=1
+    FRONTENDIMAGE=ubuntu:
+    UUID=$(cat /proc/sys/kernel/random/uuid | sed 's/.*-\([a-f0-9]*\)$/\1/')
+    CLUSTERNAME="mlc-${UUID}"
+    NETWORKNAME="nw-${UUID}"
+    while (( $# > 0 )); do
+        case "$1" in
+            --name|-N)      CLUSTERNAME=$2
+                            shift;;
+
+            --node-count|-n)    NODECOUNT=$2
+                                shift;;
+
+            --front-end-image|-f)   FRONTENDIMAGE=$2
+                                    shift;;
+
+            --working-node-image|-f)    WNIMAGE=$2
+                                        shift;;
+
+            --create-network|-t)        CREATENETWORK=True;;
+
+            --network-name|-W)          NETWORKNAME=$2 
+                                        shift;;
+
+            *) usage create && exit 1;;
+        esac
+        shift
+    done
+
+    if ! ensure_network_exists "$NETWORKNAME" "$CREATENETWORK"; then
+        return 2
+    fi
+    p_debug "using network $NETWORKNAME"
+
+    p_debug "creating host $CLUSTERNAME using image $FRONTENDIMAGE"
+    ERROR=$(lxc launch -n "$NETWORKNAME" -e $FRONTENDIMAGE "$CLUSTERNAME" > /dev/null)
+    SUCCESS=$?
+
+    if (( $SUCCESS == 0 )); then
+        echo "frontend $CLUSTERNAME successfully launched"
+    else
+        p_error "failed to launch frontend $CLUSTERNAME ($ERROR)"
+    fi
+}
+
+n=0
+while (( $# > 0 )); do
+    if [ "${1:0:1}" == "-" -a "${1:1:1}" != "-" ]; then
+        for f in $(echo "${1:1}" | sed 's/\(.\)/-\1 /g' ); do
+            ARR[$n]="$f"
+            n=$(($n+1))
+        done
+    else
+        ARR[$n]="$1"
+        n=$(($n+1))
+    fi
+    shift
+done
+
+n=0
+COMMAND=
+while [ $n -lt ${#ARR[@]} -a "$COMMAND" == "" ]; do
+    PARAM="${ARR[$n]}"
+    case "$PARAM" in
+        create|delete) COMMAND="$PARAM";;
+        --help | -h) usage && exit 0;;
+        *) usage && exit 1;;
+    esac
+    n=$(($n+1))
+done
+
+if [ "$COMMAND" != "" ]; then
+    $COMMAND "${ARR[@]:$n}"
+else
+    echo "no command issued" && usage && exit 1
+fi
