@@ -1,0 +1,37 @@
+#!/bin/bash
+
+function list() {
+    add_help_cmd "--help|-h" "shows this help and exists"
+    add_help_cmd "--silent|-s" "does not print the header"
+    add_help_cmd "--show-nodes|-S" "shows all the node names managed by mlc (not only the clusters)"
+
+    local SHOWNODES SILENT
+    while (( $# > 0 )); do
+        case "$1" in
+            --show-nodes|-S)    SHOWNODES=True;;
+            --silent|-s)        SILENT=True;;
+            --help | -h) usage list && exit 0;;
+            *) usage list && exit 1;;
+        esac
+        shift
+    done
+
+    local CLUSTERNAME
+    local C_INFO
+    if [ "$SHOWNODES" == "True" ]; then 
+        get_container_list
+        return $?
+    else
+        { 
+            [ "$SILENT" != "True" ] && echo "Name;Networks;IPs;Nodes"
+            for CLUSTERNAME in $(get_cluster_list); do
+                C_INFO=$(get_cluster_info $CLUSTERNAME)
+                if (($? == 0)); then
+                    echo "$C_INFO" | tr '\n' ' '
+                    echo
+                fi
+            done 
+        } | column -t -s ';'
+    fi
+    return 0
+}

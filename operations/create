@@ -1,0 +1,80 @@
+#!/bin/bash
+
+function create() {
+    local NODECOUNT=1
+    local FRONTENDIMAGE=ubuntu:
+    local UUID=$(cat /proc/sys/kernel/random/uuid | sed 's/.*-\([a-f0-9]*\)$/\1/')
+    local CLUSTERNAME=
+    local NETWORKNAME=
+    local ENTERCLUSTER=
+    local CONTEXTFOLDER=
+
+    add_help_cmd "<name>" "name of the cluster (default: auto generated name). The name of the cluster MUST follow the format mlc-<name>. If it is not respected, mlc- will be prepended"
+    add_help_cmd "--front-end-image|-f <image>" "name of the image to be used for the front-end (default: ubuntu:latest)"
+    add_help_cmd "--help|-h" "shows this help and exists"
+    add_help_cmd "--enter-cluster|-e" "enters in the cluster, in an interactive session, if it is successfully created"
+    add_help_cmd "--context-folder|-c" "folder that contains the scripts to be executed on contextualization"
+
+    while (( $# > 0 )); do
+        case "$1" in
+            --front-end-image|-f)   FRONTENDIMAGE=$2
+                                    shift;;
+
+            --create-network|-t)        CREATENETWORK=True;;
+
+            --enter-cluster|-e)     ENTERCLUSTER=True;;
+
+            --context-folder|-c)        CONTEXTFOLDER=$2
+                                        shift;;
+
+            --help|-h)          usage create && exit 0;;
+            *)  if [ "$CLUSTERNAME" == "" ]; then 
+                    CLUSTERNAME=$(ensure_valid_clustername "$CLUSTERNAME")
+                else
+                    usage addnode && exit 1
+                fi;;
+        esac
+        shift
+    done
+
+    # First we will check if the folder provided for contextualization is valid
+    ensure_valid_folder "$CONTEXTFOLDER" || return 1
+
+    # If a name for the cluster is not provided, we will generate a new one
+    if [ "$CLUSTERNAME" == "" ]; then
+        CLUSTERNAME=$(ensure_valid_clustername "$UUID")
+    fi
+    NETWORKNAME="$(get_cluster_network_name "$CLUSTERNAME")"
+
+    # If the cluster does not exist, fail
+    if cluster_exists "$CLUSTERNAME"; then
+        p_error "cluster $CLUSTERNAME already exists"
+        return 1
+    fi
+    
+    # Finally we will launch the container
+    if ! launch_container "$CLUSTERNAME" "$FRONTENDIMAGE" "$NETWORKNAME"; then
+        p_error "failed to launch frontend $CLUSTERNAME"
+        return 4
+    fi
+
+    # If the container has been launched, we will wait for its IP address
+    p_debug "waiting for container to have IP address"
+    output_to_var_or_fail IP -- wait_node_ip_address "$CLUSTERNAME" || return 4
+
+    # And now we will contextualize the container (if needed)
+    if [ "$CONTEXTFOLDER" != "" ]; then
+        p_debug "contextualization of $CLUSTERNAME"
+        prepare_context "$CLUSTERNAME" "$CONTEXTFOLDER"
+        execute_in_container "$CLUSTERNAME" "$CONTEXTSCRIPT"
+    fi
+
+    p_out "$CLUSTERNAME successfully created"
+
+    # An extra function is to automatically enter into the cluster
+    if [ "$ENTERCLUSTER" == "True" ]; then
+        lxc exec $CLUSTERNAME bash
+    fi
+
+    return 0
+}

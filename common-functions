@@ -1,0 +1,177 @@
+#!/bin/bash
+
+declare UNDO_CMDS=()
+EXECUTE_COMMANDS=True
+
+declare CMD_CMD=()
+declare CMD_DESC=()
+function show_help_cmd() {
+    local i max_width w
+    for ((i=0; i<${#CMD_CMD[@]}; i++)); do
+        w=${#CMD_CMD[$i]}
+        max_width=$(( w > max_width ? w : max_width ))
+    done
+    for ((i=0; i<${#CMD_CMD[@]}; i++)); do
+        echo
+        fmt_command_out $((max_width+2)) "${CMD_CMD[$i]} -" "${CMD_DESC[$i]}"
+    done
+}
+
+function fmt_command_out() {
+    local max_width=$1
+    local cmd=$2
+    local desc=$3
+    local padblank=$(printf "%0.1s" " "{0..100})
+    local fmt_str_1="%${max_width}s %s"
+    local fmt_str_2="${padblank:0:$((max_width+1))}%s%s"
+    local fmt_str=$fmt_str_1
+    local cmd_txt=$cmd
+    local LINE
+    while read LINE; do
+        printf "${fmt_str}\n" "$cmd_txt" "$LINE"
+        fmt_str=$fmt_str_2
+        cmd_txt=
+    done <<< "$(echo "$desc" | fold -s -w $((80-$max_width)))"
+}
+
+function show_cmd_line() {
+    local OSTR="Usage: $0"
+    if [ "$@" != "" ]; then
+        OSTR="$OSTR $@"
+    fi
+    local w=${#OSTR}
+    local CMD_STR=
+    for ((i=0; i<${#CMD_CMD[@]}; i++)); do
+        CMD_STR="$CMD_STR ${CMD_CMD[$i]}"
+    done
+    fmt_command_out $w "$OSTR" "$CMD_STR"
+}
+
+function add_help_cmd() {
+    CMD_CMD+=("$1")
+    CMD_DESC+=("$2")
+}
+
+function retry_while() {
+    local n=1
+    local max=$1
+    local str_condition=$2
+    local delay=2
+    shift
+    shift
+    while true; do
+        STR_RET=$($@)
+        if [ $? -ne 0 -o "$STR_RET" == "$str_condition" ]; then
+            ((n++))
+            if [ $n -le $max ]; then
+                sleep $delay
+            else
+                return -1
+            fi
+        else
+            echo "$STR_RET"
+            return 0
+        fi
+    done
+}
+
+function retry_execute_command {
+    local n=1
+    local max=$1
+    local delay=$2
+    shift
+    shift
+    while true; do
+        if execute_command "$@"; then
+            return $?
+        else
+            if [[ $n -lt $max ]]; then
+                ((n++))
+                sleep $delay;
+            else
+                return -1
+            fi
+        fi
+    done
+}
+
+function execute_command() {
+    if [ "$EXECUTE_COMMANDS" == "True" ]; then
+        $@
+        return $?
+    else
+        return 0
+    fi
+}
+
+function usage() {
+    # echo "uso: $0 $1"
+    show_cmd_line $1
+    show_help_cmd
+}
+
+function p_debug() {
+    echo "[DEBUG] $@"
+}
+
+function p_info() {
+    echo "[INFO] $@"
+}
+
+function p_out() {
+    echo "$@"
+}
+
+function p_error() {
+    echo "[ERROR] $@" >&2
+}
+
+function p_error_s() {
+    if [ "$@" != "" ]; then
+        echo "[ERROR] $@" >&2
+    fi
+}
+
+function add_undo_cmdline() {
+    UNDO_CMDS="${UNDO_CMDS}$@
+"
+}
+
+function execute_undo_cmds() {
+    local LINE
+    while read LINE; do
+        retry_execute_command 5 5 "$LINE"
+    done <<< "$(echo "${UNDO_CMDS}" | tac - | tail -n +2)"
+}
+
+function ensure_valid_folder() {
+    local FOLDER=$1
+    if [ "$FOLDER" == "" ]; then
+        return 0
+    fi
+    if [ ! -d "$FOLDER" ]; then
+        p_error "path $FOLDER is not a folder"
+        return 1
+    fi
+    return 0
+}
+
+function output_to_var_or_fail() {
+    local output result
+    local varname=$1
+    local fail_msg=$2
+    shift
+    shift
+    output="$($@ 2>&1)"
+    result=$?
+    if ((result != 0)); then
+        if [ "$fail_msg" == "--" ]; then
+            p_error "$output"
+        else
+            p_error "$fail_msg ($output)"        
+        fi
+        return $result
+    fi
+    read -d '\0' $varname <<< "$output"
+    return 0
+}

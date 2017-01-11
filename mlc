@@ -1,187 +1,43 @@
 #!/bin/bash
 # TODO: 
+# TODO: ver si se normaliza el nombre de las redes autocreadas
+#     * si se mata un contenedor y se pide que se eliminen sus redes, se podrian eliminar otras redes
+#       utilizar un nombre normalizado permitiria no eliminar todas
+#   > * otra opcion seria hacer que siempre se crease una red propia para el cluster y solo eliminar esa red
+#
+# TODO: ver si se crea un perfil automaticamente para evitar que se añadan otros interfaces
+#     * tambien se deberia poder permitir utilizar un perfil base, pero entonces habria que ver si cuando
+#       se añade una red nueva, si coge IP por DHCP o si se ha de forzar si no es el eth0
 
-CURL_CMD="curl -sf --unix-socket /var/lib/lxd/unix.socket http:"
-declare UNDO_CMDS=()
-EXECUTE_COMMANDS=True
+source $(dirname $0)/config
+source $(dirname $0)/common-functions
+source $(dirname $0)/networks
+source $(dirname $0)/operations/create
+source $(dirname $0)/operations/addnode
+source $(dirname $0)/operations/delete
+source $(dirname $0)/operations/list
 
-declare CMD_CMD=()
-declare CMD_DESC=()
-function show_help_cmd() {
-    local i max_width w
-    for ((i=0; i<${#CMD_CMD[@]}; i++)); do
-        w=${#CMD_CMD[$i]}
-        max_width=$(( w > max_width ? w : max_width ))
-    done
-    for ((i=0; i<${#CMD_CMD[@]}; i++)); do
-        echo
-        fmt_command_out $((max_width+2)) "${CMD_CMD[$i]} -" "${CMD_DESC[$i]}"
-    done
-}
+function prepare_context() {
+    local C_NAME=$(ensure_valid_clustername $1)
+    local FOLDER=$2
 
-function fmt_command_out() {
-    local max_width=$1
-    local cmd=$2
-    local desc=$3
-    local padblank=$(printf "%0.1s" " "{0..100})
-    local fmt_str_1="%${max_width}s %s"
-    local fmt_str_2="${padblank:0:$((max_width+1))}%s%s"
-    local fmt_str=$fmt_str_1
-    local cmd_txt=$cmd
-    local LINE
-    while read LINE; do
-        printf "${fmt_str}\n" "$cmd_txt" "$LINE"
-        fmt_str=$fmt_str_2
-        cmd_txt=
-    done <<< "$(echo "$desc" | fold -s -w $((80-$max_width)))"
-}
-
-function exec_in_container() {
-    local C_NAME=$1
-    local TMPFILE=$(mktemp /tmp/mlcXXXXX)
-    cat > "$TMPFILE" << \EOT
-# We know the path of the default installation of torque
-apt-get update && apt-get install -y torque-server torque-client torque-mom torque-pam
-
-TORQUE_PATH=/var/spool/torque
-EC4DOCK_MAXNODES=4
-EC4DOCK_NODEBASENAME=node
-EC4DOCK_SERVERNAME=$HOSTNAME
-
-# Set a fake list of nodes
-for i in `seq 1 $EC4DOCK_MAXNODES`; do
-        item="${EC4DOCK_NODEBASENAME}${i}";
-        grep -q "\<${item}\>" /etc/hosts || echo "127.0.0.1 ${item}.localdomain ${item}" >> /etc/hosts;
-done
-echo "127.0.0.1 $(hostname)" >> /etc/hosts
-
-# Generate keypairs
-sudo -u ubuntu ssh-keygen -N "" -f /home/ubuntu/.ssh/id_rsa
-sudo -u ubuntu cp /home/ubuntu/.ssh/id_rsa.pub /home/ubuntu/.ssh/authorized_keys
-
-# Now configure the ssh
-sudo -u ubuntu cat >> /home/ubuntu/.ssh/config << EOF
-Host $EC4DOCK_SERVERNAME localhost ${EC4DOCK_NODEBASENAME}*
-StrictHostKeyChecking no
-LogLevel quiet
-UserKnownHostsFile /dev/null
-EOF
-
-# Ensure that the folder exists
-mkdir -p ${TORQUE_PATH}/server_priv/queues
-
-# We configure the server name
-echo "$EC4DOCK_SERVERNAME" > /etc/torque/server_name
-
-# Now we create the list of nodes that could be part of the cluster
-echo "" > ${TORQUE_PATH}/server_priv/nodes
-for i in `seq 1 $EC4DOCK_MAXNODES`; do
-        echo "${EC4DOCK_NODEBASENAME}${i}" >> ${TORQUE_PATH}/server_priv/nodes
-done
-
-# We ensure that the torque server is started because qmgr needs it
-service torque-scheduler stop
-
-# Finally restart the torque server and start the scheduler
-while [ "$(pgrep pbs_server)" != "" ]; do
-        service torque-server stop
-        sleep 3
-done
-
-while [ "$(pgrep pbs_server)" == "" ]; do
-        service torque-server start
-        sleep 3
-done
-
-service torque-scheduler stop
-sleep 3
-# We also stop the scheduler by now...
-service torque-scheduler start
-
-sleep 3
-# Now configure a default queue
-qmgr localhost << EOF
-create queue batch
-set queue batch queue_type = Execution
-set queue batch resources_default.nodes = 1
-set queue batch enabled = True
-set queue batch started = True
-set server default_queue = batch
-set server scheduling = True
-set server scheduler_iteration = 20
-set server node_check_rate = 40
-set server resources_default.neednodes = 1
-set server resources_default.nodect = 1
-set server resources_default.nodes = 1
-set server query_other_jobs = True
-set server node_pack = False
-set server job_stat_rate = 30
-set server mom_job_sync = True
-set server poll_jobs = True
-EOF
-
-service torque-scheduler stop
-
-# Finally restart the torque server and start the scheduler
-while [ "$(pgrep pbs_server)" != "" ]; do
-        service torque-server stop
-        sleep 3
-done
-
-while [ "$(pgrep pbs_server)" == "" ]; do
-        service torque-server start
-        sleep 3
-done
-
-service torque-scheduler start
-
-exit 0
-EOT
-    lxc file push "$TMPFILE" "${C_NAME}/root/context"
-    rm -f "$TMPFILE"
-    lxc exec "${C_NAME}" chmod +x /root/context
-    lxc exec "${C_NAME}" /root/context
-}
-
-function show_cmd_line() {
-    local OSTR="Usage: $0"
-    if [ "$@" != "" ]; then
-        OSTR="$OSTR $@"
-    fi
-    local w=${#OSTR}
-    local CMD_STR=
-    for ((i=0; i<${#CMD_CMD[@]}; i++)); do
-        CMD_STR="$CMD_STR ${CMD_CMD[$i]}"
-    done
-    fmt_command_out $w "$OSTR" "$CMD_STR"
-}
-
-function add_help_cmd() {
-    CMD_CMD+=("$1")
-    CMD_DESC+=("$2")
-}
-
-function retry_while() {
-    local n=1
-    local max=$1
-    local str_condition=$2
-    local delay=2
-    shift
-    shift
-    while true; do
-        STR_RET=$($@)
-        if [ $? -ne 0 -o "$STR_RET" == "$str_condition" ]; then
-            ((n++))
-            if [ $n -le $max ]; then
-                sleep $delay
-            else
-                return -1
-            fi
-        else
-            echo "$STR_RET"
-            return 0
+    if [ -e "$FOLDER" ]; then
+        lxc file push -p context-node $C_NAME/$CONTEXTSCRIPT > /dev/null 2> /dev/null && 
+            lxc file push -r -p $FOLDER/* $C_NAME/etc/context.d/ > /dev/null 2> /dev/null
+        if (($? != 0)); then
+            p_error "could not stage in folder $FOLDER"
+            return 1
         fi
-    done
+    fi
+    return 0
+}
+
+function execute_in_container() {
+    local C_NAME=$(ensure_valid_clustername $1)
+    local COMMAND="$2"
+
+    lxc exec $C_NAME "$COMMAND"
+    return $?
 }
 
 function ensure_valid_clustername() {
@@ -192,116 +48,6 @@ function ensure_valid_clustername() {
             echo "$1"
         else
             echo "mlc-$1"
-        fi
-    fi
-}
-
-function get_container_ip() {
-    local C_NAME=$1
-    local ADDR_IP
-
-    ADDR_IP=$($CURL_CMD/1.0/containers/$C_NAME/state -XGET | jq '.metadata.network["eth0"].addresses[] | select(."family"=="inet") | .address' 2> /dev/null)
-    if [ $? -ne 0 ]; then
-        return 1
-    fi    
-    echo "$ADDR_IP" | tr -d '"'
-    return 0
-}
-
-function retry_execute_command {
-    local n=1
-    local max=$1
-    local delay=$2
-    shift
-    shift
-    while true; do
-        if execute_command "$@"; then
-            return $?
-        else
-            if [[ $n -lt $max ]]; then
-                ((n++))
-                sleep $delay;
-            else
-                return -1
-            fi
-        fi
-    done
-}
-
-function execute_command() {
-    if [ "$EXECUTE_COMMANDS" == "True" ]; then
-        $@
-        return $?
-    else
-        p_cmd "$@"
-        return 0
-    fi
-}
-
-function usage() {
-    # echo "uso: $0 $1"
-    show_cmd_line $1
-    show_help_cmd
-}
-
-function p_cmd() {
-    echo "[CMD] $@"
-}
-
-function p_debug() {
-    echo "[DEBUG] $@"
-}
-
-function p_error() {
-    echo "[ERROR] $@" >&2
-}
-
-function p_error_s() {
-    if [ "$@" != "" ]; then
-        echo "[ERROR] $@" >&2
-    fi
-}
-
-function add_undo_cmdline() {
-    UNDO_CMDS="${UNDO_CMDS}$@
-"
-}
-
-function execute_undo_cmds() {
-    while read LINE; do
-        retry_execute_command 5 5 "$LINE"
-    done <<< "$(echo "${UNDO_CMDS}" | tac - | tail -n +2)"
-}
-
-function ensure_network_exists() {
-    local NETWORKNAME=$1
-    local CREATENETWORK=$2
-
-    if [ "$NETWORKNAME" == "" ]; then
-        p_error "network name is blank"
-        return 3
-    fi
-
-    $CURL_CMD/1.0/networks/$NETWORKNAME -XGET > /dev/null 2> /dev/null
-
-    if (( $? == 0 )); then
-        p_debug "network $NETWORKNAME exists"
-        return 0
-    else
-        if [ "$CREATENETWORK" != "True" ]; then
-            p_error "network $NETWORKNAME does not exist"
-            return 1
-        else
-            p_debug "creating network $NETWORKNAME"
-            ERR=$(execute_command lxc network create "$NETWORKNAME" 2>&1)
-            RESULT=$?
-
-            if [ $? -ne 0 ]; then
-                p_error "failed to create network $NETWORKNAME ($ERR)"
-                return 2
-            fi 
-            add_undo_cmdline lxc network delete "$NETWORKNAME"
-            return 0
         fi
     fi
 }
@@ -359,7 +105,7 @@ function ensure_container_not_exists() {
     return 0
 }
 
-function ensure_cluster_exists() {
+function cluster_exists() {
     local CLUSTERNAME=$(ensure_valid_clustername $1)
 
     if [ "$CLUSTERNAME" == "" ]; then
@@ -386,11 +132,10 @@ function ensure_cluster_exists() {
 }
 
 function get_cluster_list() {
-    local CONTAINER_STR="$(get_container_list)"
-    if [ $? -ne 0 ]; then
-        p_error "could not get the list of containers"
+    local CONTAINER_STR
+    output_to_var_or_fail CONTAINER_STR "could not get the list of containers" get_container_list ||
         return 1
-    fi
+
     local CNAME CNAME_C
     while read CNAME; do
         CNAME_C="${CNAME/mlc-*-/}"
@@ -406,16 +151,16 @@ function launch_container() {
     local C_IMAGE=$2
     local C_NETWORK=$3
 
+    p_info "creating host $C_NAME using image $C_IMAGE in network $C_NETWORK"
+
     ensure_container_not_exists "$C_NAME" || return 1
-    ensure_network_exists "$C_NETWORK" "False" || return 2
+    ensure_network_exists "$C_NETWORK" "True" || return 2
     ensure_image_exists "$C_IMAGE" || return 3
 
-    ERROR=$(execute_command lxc launch -n "$C_NETWORK" -e $C_IMAGE "$C_NAME" > /dev/null)
-
+    execute_command lxc launch -n "$C_NETWORK" -e $C_IMAGE "$C_NAME" > /dev/null
     if (( $? == 0 )); then
         p_debug "container $C_NAME successfully launched"
         # As we are using ephemeral containers, we do not need to delete them
-        # add_undo_cmdline lxc delete "$CLUSTERNAME"
         add_undo_cmdline lxc stop "$C_NAME"
         return 0
     else
@@ -425,130 +170,17 @@ function launch_container() {
 
 function get_nodes_of_cluster() {
     local CLUSTERNAME=$(ensure_valid_clustername $1)
-    local CONTAINER_STR=$(get_container_list)
-    if [ $? -ne 0 ]; then
-        p_error "could not get the list of containers"
+
+    local CONTAINER_STR
+    output_to_var_or_fail CONTAINER_STR "could not get the list of containers" get_container_list ||
         return 1
-    fi
+
     local CNAME CNAME_C
     while read CNAME; do
-        CNAME_C="${CNAME/$CLUSTER_NAME-/}"
-        if [ "${CNAME_C:0:4}" == "node" ]; then
+        if [[ "$CNAME" =~ ^$CLUSTERNAME-node[0-9]*$ ]]; then
             echo "$CNAME"
         fi
     done <<< "$CONTAINER_STR"
-    return 0
-}
-
-function addnode() {
-    local CLUSTERNAME=
-    local NODECOUNT=1
-    local WNIMAGE=ubuntu:
-    local NETWORKNAME=
-
-    add_help_cmd "--node-count|-n <number>" "number of nodes to be added"
-    add_help_cmd "--working-node-image|-f <image>" "image to be used for the container"
-    add_help_cmd "--network-name|-W <network>" "name of the network to attach the container"
-    add_help_cmd "--help|-h" "shows this help and exists"
-    add_help_cmd "<cluster name>" "name of the cluster to which the node is going to be added to"
-    while (( $# > 0 )); do
-        case "$1" in
-            --node-count|-n)    NODECOUNT=$2
-                                shift;;
-
-            --working-node-image|-f)    WNIMAGE=$2
-                                        shift;;
-
-            --network-name|-W)          NETWORKNAME=$2 
-                                        shift;;
-            --help|-h)          usage addnode && exit 0;;
-
-            *)  if [ "$CLUSTERNAME" == "" ]; then 
-                    CLUSTERNAME=$(ensure_valid_clustername $1)
-                else
-                    usage addnode && exit 1
-                fi;;
-        esac
-        shift
-    done
-
-    if ! ensure_cluster_exists "$CLUSTERNAME"; then
-        p_error "could not find a cluster named '$CLUSTERNAME'"
-        return 1
-    fi
-
-    IP=$(retry_while 3 "" get_container_ip $CLUSTERNAME)
-    if (( $? != 0 )); then
-        p_error "could not get IP address for container"
-        return 3
-    fi    
-
-    p_debug "ip for cluster $CLUSTERNAME is $IP"
-
-    NODES=$(get_nodes_of_cluster $CLUSTERNAME)
-    if (( $? != 0 )); then
-        p_error "could not get the nodes from cluster $CLUSTERNAME"
-        return 4
-    fi
-
-    local NODENAME i
-    for ((i=1;i<1000;i++)); do
-        NODENAME="$(printf "$CLUSTERNAME-node%03d" $i)"
-        if [ "$(echo "$NODES" | grep "$NODENAME")" == "" ]; then
-            break
-        fi
-    done
-    if (( i >= 1000 )); then
-        p_error "could not find a new node name (there are at least 1000 nodes!)"
-        return 5
-    fi
-
-    p_debug "using node name $NODENAME"
-
-    if [ "$NETWORKNAME" == "" ]; then
-        local NETWORKS
-        NETWORKS=$(get_networks_for_container $CLUSTERNAME)
-        if (($? != 0)); then
-            p_error "could not determine the network for cluster $CLUSTERNAME"
-            return 6
-        fi
-
-        local NNETWORKS=$(echo "$NETWORKS" | sed '/^$/'d | wc -l)
-        if ((NNETWORKS!=1)); then
-            p_error "cannot decide in which network to deploy the node (is the cluster in several networks?)"
-            return 7
-        fi
-
-        NETWORKNAME=$NETWORKS
-    fi
-
-    p_debug "using network $NETWORKNAME"
-
-    if launch_container $NODENAME $WNIMAGE $NETWORKNAME; then
-        p_debug "node $NODENAME successfully launched"
-        return 0
-    else
-        p_error "failed to launch node $NODENAME ($?)"
-        return -1
-    fi
-}
-
-function get_networks_for_container() {
-    local C_NAME=$1
-
-    if [ "$C_NAME" == "" ]; then
-        p_error "container name is blank"
-        return 1
-    fi
-
-    local C_DATA
-    C_DATA="$($CURL_CMD/1.0/containers/$C_NAME -XGET 2> /dev/null)"
-    if (( $? != 0 )); then
-        p_error "could not get information about container"
-        return 2
-    fi
-
-    echo "$C_DATA" | jq '.metadata.devices[] | select(."type"=="nic") | ."parent"' | tr -d '"'
     return 0
 }
 
@@ -556,230 +188,18 @@ function get_cluster_info() {
     local CLUSTERNAME=$(ensure_valid_clustername $1)
 
     local NODES=
-    NODES=$(get_nodes_of_cluster "$CLUSTERNAME")
-
-    if (($? != 0)); then
-        p_error "could not get the list of nodes from the cluster $CLUSTERNAME"
+    output_to_var_or_fail NODES "could not get the list of nodes from the cluster $CLUSTERNAME" get_nodes_of_cluster "$CLUSTERNAME" || 
         return 1
-    fi
 
     local NETWORKS
-    NETWORKS=$(get_networks_for_container $CLUSTERNAME)
-    if (($? != 0)); then
-        p_error "could not obtain the networks associated to $CLUSTERNAME"
+    output_to_var_or_fail NETWORKS "could not obtain the networks associated to $CLUSTERNAME" get_networks_for_container "$CLUSTERNAME" || 
         return 2
-    fi
 
     local IPS
-    IPS=$(get_container_ip "$CLUSTERNAME")
-    if (($? != 0)); then
-        p_error "could obtain the ip addresses associated to $CLUSTERNAME"
+    output_to_var_or_fail IPS "could obtain the ip addresses associated to $CLUSTERNAME" get_node_ip "$CLUSTERNAME" || 
         return 3
-    fi
     
     echo "$CLUSTERNAME;$NETWORKS;$IPS;$NODES"
-    return 0
-}
-
-function delete() {
-    local CLUSTERNAME=
-    local DELETENETWORK=True
-    local FORCE=False
-
-    add_help_cmd "<name>" "name of the cluster"
-    add_help_cmd "--no-delete-network|-n" "no deletes the network in the case that there are not any container using it (default: deletes the network)"
-    add_help_cmd "--force|-f" "deletes the front-end even if any of the working nodes could not be deleted (default: fail if a node could not be stopped)"
-    add_help_cmd "--help|-h" "shows this help and exists"
-    while (( $# > 0 )); do
-        case "$1" in
-            --delete-network|-d)        DELETENETWORK=False;;
-            --force|-f)                 FORCE=True;;
-            --help|-h)                  usage delete && exit 0;;
-            *)  if [ "$CLUSTERNAME" == "" ]; then 
-                    CLUSTERNAME=$(ensure_valid_clustername $1)
-                else
-                    usage addnode && exit 1
-                fi;;
-        esac
-        shift
-    done
-
-    if ! ensure_cluster_exists "$CLUSTERNAME"; then
-        p_error "could not find the cluster $CLUSTERNAME"
-        return 1
-    fi
-
-    local NODES=
-    NODES=$(get_nodes_of_cluster "$CLUSTERNAME")
-
-    if (($? != 0)); then
-        p_error "could not get the list of nodes from the cluster"
-        return 1
-    fi
-
-    local NODENAME=
-    local FAILED=0
-    while read NODENAME; do
-        if [ "$NODENAME" != "" ]; then
-            p_debug "stopping the container $NODENAME"
-            lxc stop "$NODENAME"
-            if (($? != 0)); then
-                p_error "could not stop node $NODENAME"
-                FAILED=$((FAILED+1))
-            else
-                p_debug "container $NODENAME successfully stopped"
-            fi
-        fi
-    done <<< "$NODES"
-
-    if [ "$FORCE" != "True" ]; then
-        if ((FAILED>0)); then
-            p_error "failed to stop $FAILED nodes from cluster $CLUSTERNAME"
-            return 2
-        fi
-    fi
-
-    local NETWORKS
-    if [ "$DELETENETWORK" == "True" ]; then
-        NETWORKS=$(get_networks_for_container $CLUSTERNAME)
-        if (($? != 0)); then
-            p_error "could not obtain the networks associated to $CLUSTERNAME"
-            return 4
-        fi
-    fi
-
-    p_debug "stopping the container $CLUSTERNAME"
-    lxc stop "$CLUSTERNAME"
-    if (($? != 0)); then
-        p_error "could not stop node $CLUSTERNAME"
-        return 3
-    fi
-
-    if [ "$DELETENETWORK" == "True" ]; then
-        local NETWORKNAME
-        local COUNT
-        while read NETWORKNAME; do
-            COUNT=$($CURL_CMD/1.0/networks/$NETWORKNAME -XGET | jq '.metadata.used_by | length')
-            if (($? == 0)); then
-                if ((COUNT==0)); then
-                    p_debug "deleting the network $NETWORKNAME"
-                    lxc network delete $NETWORKNAME
-                    if (($?==0)); then
-                        p_debug "network $NETWORKNAME successfully deleted"
-                    else
-                        p_error "could not delete network $NETWORKNAME"
-                    fi
-                else
-                    p_debug "network $NETWORKNAME still has some containers in it"
-                fi
-            else
-                p_error "could not get information about network $NETWORKNAME"
-            fi
-        done <<< "$NETWORKS"
-    fi    
-    return 0
-}
-
-function create() {
-    local CREATENETWORK=False
-    local NODECOUNT=1
-    local FRONTENDIMAGE=ubuntu:
-    local UUID=$(cat /proc/sys/kernel/random/uuid | sed 's/.*-\([a-f0-9]*\)$/\1/')
-    local CLUSTERNAME=
-    local NETWORKNAME=
-
-    add_help_cmd "<name>" "name of the cluster (default: auto generated name). The name of the cluster MUST follow the format mlc-<name>. If it is not respected, mlc- will be prepended"
-    add_help_cmd "--front-end-image|-f <image>" "name of the image to be used for the front-end (default: ubuntu:latest)"
-    add_help_cmd "--create-network|-t" "create the network if not exists (default: false)"
-    add_help_cmd "--network-name|-W <network>" "name of the network to use (default: nw-<name of the cluster>)"
-    add_help_cmd "--help|-h" "shows this help and exists"
-
-    while (( $# > 0 )); do
-        case "$1" in
-            --front-end-image|-f)   FRONTENDIMAGE=$2
-                                    shift;;
-
-            --create-network|-t)        CREATENETWORK=True;;
-
-            --network-name|-W)          NETWORKNAME=$2 
-                                        shift;;
-
-            --help|-h)          usage create && exit 0;;
-            *)  if [ "$CLUSTERNAME" == "" ]; then 
-                    CLUSTERNAME=$(ensure_valid_clustername "$CLUSTERNAME")
-                else
-                    usage addnode && exit 1
-                fi;;
-        esac
-        shift
-    done
-
-    if [ "$CLUSTERNAME" == "" ]; then
-        CLUSTERNAME=$(ensure_valid_clustername "$UUID")
-    fi
-
-    if [ "$NETWORKNAME" == "" ]; then
-        NETWORKNAME="nw-${CLUSTERNAME:4}"
-    fi
-
-    if ! ensure_network_exists "$NETWORKNAME" "$CREATENETWORK"; then
-        return 2
-    fi
-    p_debug "using network $NETWORKNAME"
-
-    if ! ensure_image_exists "$FRONTENDIMAGE"; then
-        return 3
-    fi
-
-    p_debug "creating host $CLUSTERNAME using image $FRONTENDIMAGE"
-    if ! launch_container $CLUSTERNAME $FRONTENDIMAGE $NETWORKNAME; then
-        p_error "failed to launch frontend $CLUSTERNAME ($ERROR)"
-    fi
-
-    IP=$(retry_while 5 "" get_container_ip $CLUSTERNAME)
-    if (( $? != 0 )); then
-        p_error "could not get IP address for container"
-        return 4
-    else
-        exec_in_container $CLUSTERNAME
-    fi    
-
-    return 0
-}
-
-function list() {
-    add_help_cmd "--help|-h" "shows this help and exists"
-    add_help_cmd "--silent|-s" "does not print the header"
-    add_help_cmd "--show-nodes|-S" "shows all the node names managed by mlc (not only the clusters)"
-
-    local SHOWNODES SILENT
-    while (( $# > 0 )); do
-        case "$1" in
-            --show-nodes|-S)    SHOWNODES=True;;
-            --silent|-s)        SILENT=True;;
-            --help | -h) usage list && exit 0;;
-            *) usage list && exit 1;;
-        esac
-        shift
-    done
-
-    local CLUSTERNAME
-    local C_INFO
-    if [ "$SHOWNODES" == "True" ]; then 
-        get_container_list
-        return $?
-    else
-        { 
-            [ "$SILENT" != "True" ] && echo "Name;Networks;IPs;Nodes"
-            for CLUSTERNAME in $(get_cluster_list); do
-                C_INFO=$(get_cluster_info $CLUSTERNAME)
-                if (($? == 0)); then
-                    echo "$C_INFO" | tr '\n' ' '
-                    echo
-                fi
-            done 
-        } | column -t -s ';'
-    fi
     return 0
 }
 
@@ -803,7 +223,6 @@ while [ $n -lt ${#ARR[@]} -a "$COMMAND" == "" ]; do
     PARAM="${ARR[$n]}"
     case "$PARAM" in
         list|addnode|create|delete) COMMAND="$PARAM";;
-        --simulate | -s) EXECUTE_COMMANDS=False;;
         --help | -h) usage && exit 0;;
         *) usage && exit 1;;
     esac

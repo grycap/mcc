@@ -1,0 +1,96 @@
+#!/bin/bash
+
+# We know the path of the default installation of torque
+apt-get update && apt-get install -y torque-server torque-client torque-mom torque-pam
+
+TORQUE_PATH=/var/spool/torque
+EC4DOCK_MAXNODES=$1
+EC4DOCK_SERVERNAME=$(hostname)
+EC4DOCK_NODEBASENAME=${EC4DOCK_SERVERNAME}-node
+
+# Set a fake list of nodes
+for i in `seq 1 $EC4DOCK_MAXNODES`; do
+        item="${EC4DOCK_NODEBASENAME}${i}";
+        grep -q "\<${item}\>" /etc/hosts || echo "127.0.0.1 ${item}.localdomain ${item}" >> /etc/hosts;
+done
+echo "127.0.0.1 $(hostname)" >> /etc/hosts
+
+# Generate keypairs
+sudo -u ubuntu ssh-keygen -N "" -f /home/ubuntu/.ssh/id_rsa
+sudo -u ubuntu cp /home/ubuntu/.ssh/id_rsa.pub /home/ubuntu/.ssh/authorized_keys
+
+# Now configure the ssh
+sudo -u ubuntu cat >> /home/ubuntu/.ssh/config << EOF
+Host $EC4DOCK_SERVERNAME localhost ${EC4DOCK_NODEBASENAME}*
+StrictHostKeyChecking no
+LogLevel quiet
+UserKnownHostsFile /dev/null
+EOF
+
+# Ensure that the folder exists
+mkdir -p ${TORQUE_PATH}/server_priv/queues
+
+# We configure the server name
+echo "$EC4DOCK_SERVERNAME" > /etc/torque/server_name
+
+# Now we create the list of nodes that could be part of the cluster
+echo "" > ${TORQUE_PATH}/server_priv/nodes
+for i in `seq 1 $EC4DOCK_MAXNODES`; do
+        echo "${EC4DOCK_NODEBASENAME}${i}" >> ${TORQUE_PATH}/server_priv/nodes
+done
+
+# We ensure that the torque server is started because qmgr needs it
+/etc/init.d/torque-scheduler stop
+
+# Finally restart the torque server and start the scheduler
+until [ "$(pgrep pbs_server)" == "" ]; do
+        /etc/init.d/torque-server stop
+        sleep 3
+done
+
+until [ "$(pgrep pbs_server)" != "" ]; do
+        /etc/init.d/torque-server start
+        sleep 3
+done
+
+/etc/init.d/torque-scheduler stop
+sleep 3
+# We also stop the scheduler by now...
+/etc/init.d/torque-scheduler start
+
+sleep 3
+# Now configure a default queue
+qmgr << EOF
+create queue batch
+set queue batch queue_type = Execution
+set queue batch resources_default.nodes = 1
+set queue batch enabled = True
+set queue batch started = True
+set server default_queue = batch
+set server scheduling = True
+set server scheduler_iteration = 20
+set server node_check_rate = 40
+set server resources_default.neednodes = 1
+set server resources_default.nodect = 1
+set server resources_default.nodes = 1
+set server query_other_jobs = True
+set server node_pack = False
+set server job_stat_rate = 30
+set server mom_job_sync = True
+set server poll_jobs = True
+EOF
+
+/etc/init.d/torque-scheduler stop
+
+# Finally restart the torque server and start the scheduler
+until [ "$(pgrep pbs_server)" == "" ]; do
+        /etc/init.d/torque-server stop
+        sleep 3
+done
+
+until [ "$(pgrep pbs_server)" != "" ]; do
+        /etc/init.d/torque-server start
+        sleep 3
+done
+
+/etc/init.d/torque-scheduler start
