@@ -1,3 +1,4 @@
 CURL_CMD="curl -sf --unix-socket /var/lib/lxd/unix.socket http:"
-CONTEXTSCRIPT="/opt/context/context-node"
+CONTEXTSCRIPT_REMOTE="/opt/context/context-node"
+CONTEXTSCRIPT_LOCAL="$(dirname $0)/context/context-node"
 MAXNODES=100

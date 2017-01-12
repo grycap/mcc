@@ -33,6 +33,7 @@ function addnode() {
     local WNIMAGE=ubuntu:
     local CONTEXTFOLDER
 
+    reset_help
     add_help_cmd "--node-count|-n <number>" "number of nodes to be added"
     add_help_cmd "--working-node-image|-f <image>" "image to be used for the container"
     add_help_cmd "--help|-h" "shows this help and exists"

@@ -9,6 +9,7 @@ function create() {
     local ENTERCLUSTER=
     local CONTEXTFOLDER=
 
+    reset_help
     add_help_cmd "<name>" "name of the cluster (default: auto generated name). The name of the cluster MUST follow the format mlc-<name>. If it is not respected, mlc- will be prepended"
     add_help_cmd "--front-end-image|-f <image>" "name of the image to be used for the front-end (default: ubuntu:latest)"
     add_help_cmd "--help|-h" "shows this help and exists"

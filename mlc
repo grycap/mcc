@@ -10,19 +10,45 @@
 #       se añade una red nueva, si coge IP por DHCP o si se ha de forzar si no es el eth0
 
 source $(dirname $0)/config
-source $(dirname $0)/common-functions
-source $(dirname $0)/networks
+source $(dirname $0)/include/common-functions
+source $(dirname $0)/include/network-functions
 source $(dirname $0)/operations/create
 source $(dirname $0)/operations/addnode
 source $(dirname $0)/operations/delete
 source $(dirname $0)/operations/list
+
+function startup() {
+    jq --version > /dev/null 2> /dev/null
+    if (($?!=0)); then
+        p_error "jq is not properly installed"
+        return 1
+    fi
+    local LXC
+    LXC=$(lxc --version 2> /dev/null)
+    if (($?!=0)); then
+        p_error "lxd is not properly installed"
+        return 2
+    fi
+    local MAJOR REST
+    IFS='.' read MAJOR REST <<< "$LXC"
+    if ((MAJOR<2)); then
+        p_error "this only works if lxc version is greater or equal to 2"
+        return 3
+    fi
+    $CURL_CMD > /dev/null 2> /dev/null
+    if (($?!=0)); then
+        p_error "could not contact to the lxd server using curl (needs curl version 7.45 or later)"
+        return 4
+    fi
+    return 0
+}
 
 function prepare_context() {
     local C_NAME=$(ensure_valid_clustername $1)
     local FOLDER=$2
 
     if [ -e "$FOLDER" ]; then
-        lxc file push -p context-node $C_NAME/$CONTEXTSCRIPT > /dev/null 2> /dev/null && 
+        lxc file push -p $CONTEXTSCRIPT_LOCAL $C_NAME/$CONTEXTSCRIPT_REMOTE > /dev/null 2> /dev/null && 
             lxc file push -r -p $FOLDER/* $C_NAME/etc/context.d/ > /dev/null 2> /dev/null
         if (($? != 0)); then
             p_error "could not stage in folder $FOLDER"
@@ -61,7 +87,7 @@ function ensure_image_exists() {
     fi
 
     local ERR
-    ERR=$(execute_command lxc image show $IMAGENAME)
+    ERR=$(execute_command lxc image show $IMAGENAME 2>&1)
 
     if (( $? != 0 )); then
         p_error "image $IMAGENAME does not exist"
@@ -217,17 +243,24 @@ while (( $# > 0 )); do
     shift
 done
 
+add_help_cmd "list" "lists the clusters that are running"
+add_help_cmd "addnode" "adds nodes to one cluster"
+add_help_cmd "create" "creates one cluster"
+add_help_cmd "delete" "deletes one cluster"
+
 n=0
 COMMAND=
 while [ $n -lt ${#ARR[@]} -a "$COMMAND" == "" ]; do
     PARAM="${ARR[$n]}"
     case "$PARAM" in
         list|addnode|create|delete) COMMAND="$PARAM";;
-        --help | -h) usage && exit 0;;
+        --help | -h) usage "" && exit 0;;
         *) usage && exit 1;;
     esac
     n=$(($n+1))
 done
+
+startup || exit -1
 
 if [ "$COMMAND" != "" ]; then
     $COMMAND "${ARR[@]:$n}"

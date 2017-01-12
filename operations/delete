@@ -4,7 +4,7 @@ function delete_cluster() {
     local FORCE=$2
     local DELETENETWORK=$3
 
-    if ! ensure_cluster_exists "$CLUSTERNAME"; then
+    if ! cluster_exists "$CLUSTERNAME"; then
         p_error "could not find the cluster $CLUSTERNAME"
         return 1
     fi
@@ -92,6 +92,7 @@ function delete() {
     local FORCE=False
     local ALL=False
 
+    reset_help
     add_help_cmd "<name>" "name of the cluster"
     add_help_cmd "--no-delete-network|-n" "no deletes the network in the case that there are not any container using it (default: deletes the network)"
     add_help_cmd "--force|-f" "deletes the front-end even if any of the working nodes could not be deleted (default: fail if a node could not be stopped)"

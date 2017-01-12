@@ -1,6 +1,7 @@
 #!/bin/bash
 
 function list() {
+    reset_help
     add_help_cmd "--help|-h" "shows this help and exists"
     add_help_cmd "--silent|-s" "does not print the header"
     add_help_cmd "--show-nodes|-S" "shows all the node names managed by mlc (not only the clusters)"

@@ -5,6 +5,13 @@ EXECUTE_COMMANDS=True
 
 declare CMD_CMD=()
 declare CMD_DESC=()
+function reset_help() {
+    CMD_CMD=()
+    CMD_DESC=()
+}
+
+reset_help
+
 function show_help_cmd() {
     local i max_width w
     for ((i=0; i<${#CMD_CMD[@]}; i++)); do
@@ -36,8 +43,8 @@ function fmt_command_out() {
 
 function show_cmd_line() {
     local OSTR="Usage: $0"
-    if [ "$@" != "" ]; then
-        OSTR="$OSTR $@"
+    if [ "$1" != "" ]; then
+        OSTR="$OSTR $1"
     fi
     local w=${#OSTR}
     local CMD_STR=
