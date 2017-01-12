@@ -1,5 +1,14 @@
 #!/bin/bash
-function generate_new_node_name() {
+function get_nodeid_from_nodename() {
+    local NODENAME=$1
+
+    nodename_valid "$NODENAME" || return 1
+
+    echo "${NODENAME#mlc-*-}"
+    return 0
+}
+
+function generate_new_node_id() {
     # This function generates a name for a new node in the cluster. It will fail if the cluster does not exist or
     #   if it cannot allocate a new node name (probably because the maximum amount of nodes has been reached)
     local CLUSTERNAME=$1
@@ -10,7 +19,7 @@ function generate_new_node_name() {
     # We will simply generate names and check if they are used or not
     local NODENAME i
     for ((i=1;i<$MAXNODES;i++)); do
-        NODENAME="$(printf "$CLUSTERNAME-node%d" $i)"
+        NODENAME="$CLUSTERNAME-node$i"
         if [ "$(echo "$NODES" | grep "$NODENAME")" == "" ]; then
             break
         fi
@@ -23,7 +32,7 @@ function generate_new_node_name() {
     fi
 
     # Output the name of the node
-    echo $NODENAME
+    echo "node$i"
     return 0
 }
 
@@ -74,31 +83,56 @@ function addnode() {
         return 3
     p_debug "ip for cluster $CLUSTERNAME is $C_IP"
 
-    # We need a name for the new node
-    p_debug "creating a new name for the working node"
-    local NODENAME
-    output_to_var_or_fail NODENAME "could not allocate a name for the new node" generate_new_node_name "$CLUSTERNAME" ||
-        return 4
-    p_debug "using node name $NODENAME"
+    # We simply repeat the same method for all the nodes
+    local i
+    for ((i=0;i<NODECOUNT;i++)); do
 
-    # Finally we will launch the container
-    if ! launch_container "$NODENAME" "$WNIMAGE" "$NETWORKNAME"; then
-        p_error "failed to launch node $NODENAME ($?)"
-        return 5
-    fi
+        # We need a name for the new node
+        p_debug "creating a new name for the working node"
+        local NODEID
+        local NODENAME
+        output_to_var_or_fail NODEID "could not allocate a name for the new node" generate_new_node_id "$CLUSTERNAME" ||
+            return 4
 
-    # If the container has been launched, we will wait for its IP address
-    local N_IP
-    p_debug "waiting for container to have IP address"
-    output_to_var_or_fail N_IP -- wait_node_ip_address "$NODENAME" || 
-        return 6
+        NODENAME="$CLUSTERNAME-$NODEID"
+        p_debug "using node name $NODENAME"
+
+        # Finally we will launch the container
+        if ! launch_container "$NODENAME" "$WNIMAGE" "$NETWORKNAME"; then
+            p_error "failed to launch node $NODENAME ($?)"
+            return 5
+        fi
+
+        # If the container has been launched, we will wait for its IP address
+        local N_IP
+        p_debug "waiting for container to have IP address"
+        output_to_var_or_fail N_IP -- wait_node_ip_address "$NODENAME" || 
+            return 6
+        
+        p_debug "node has $N_IP IP address"
+
+        # And now we will contextualize the container
+        prepare_context "$NODENAME"
+        if [ "$CONTEXTFOLDER" != "" ]; then
+            p_debug "contextualization of $NODENAME"
+            stage_in_folder "$NODENAME" "$CONTEXTFOLDER" "$MLC_CONTEXT_SCRIPTS_REMOTE_FOLDER"
+        fi
+
+        # And contextualize it
+        if execute_context "$NODENAME"; then
+            p_debug "contextualization of $NODENAME suceeded"
+        else
+            p_error "failed to contextualize $NODENAME"
+        fi
+
+        # Finally we MUST add the node to the front-end    
+        if ! execute_in_container "$CLUSTERNAME" "$MLC_REMOTE_FOLDER/$MLC_SCRIPT_ADDNODE" "$NODENAME" "$N_IP" "${NODEID}" "${NODENAME}" "${NODEID}.${CLUSTERNAME}"; then
+            p_error "failed to add the node to the cluster"
+            return 1
+        fi
+
+        p_out "node $NODENAME successfully added to the cluster"
+    done
     
-    # And now we will contextualize the container (if needed)
-    if [ "$CONTEXTFOLDER" != "" ]; then
-        p_debug "contextualization of $NODENAME"
-        prepare_context "$NODENAME" "$CONTEXTFOLDER"
-        execute_in_container "$NODENAME" "$CONTEXTSCRIPT"
-    fi
-
-    # Finally we MUST add the node to the front-end    
+    return 0
 }

@@ -4,10 +4,11 @@ function create() {
     local NODECOUNT=1
     local FRONTENDIMAGE=ubuntu:
     local UUID=$(cat /proc/sys/kernel/random/uuid | sed 's/.*-\([a-f0-9]*\)$/\1/')
-    local CLUSTERNAME=
-    local NETWORKNAME=
-    local ENTERCLUSTER=
-    local CONTEXTFOLDER=
+    local CLUSTERNAME
+    local NETWORKNAME
+    local ENTERCLUSTER
+    local CONTEXTFOLDER
+    local DELETE
 
     reset_help
     add_help_cmd "<name>" "name of the cluster (default: auto generated name). The name of the cluster MUST follow the format mlc-<name>. If it is not respected, mlc- will be prepended"
@@ -15,22 +16,23 @@ function create() {
     add_help_cmd "--help|-h" "shows this help and exists"
     add_help_cmd "--enter-cluster|-e" "enters in the cluster, in an interactive session, if it is successfully created"
     add_help_cmd "--context-folder|-c" "folder that contains the scripts to be executed on contextualization"
+    add_help_cmd "--delete-on-exit|-D" "deletes the cluster when exiting the interactive session (implies -e)"
 
     while (( $# > 0 )); do
         case "$1" in
             --front-end-image|-f)   FRONTENDIMAGE=$2
                                     shift;;
 
-            --create-network|-t)        CREATENETWORK=True;;
-
             --enter-cluster|-e)     ENTERCLUSTER=True;;
 
             --context-folder|-c)        CONTEXTFOLDER=$2
                                         shift;;
+            --delete-on-exit|-D)    ENTERCLUSTER=True    
+                                    DELETE=True;;
 
             --help|-h)          usage create && exit 0;;
             *)  if [ "$CLUSTERNAME" == "" ]; then 
-                    CLUSTERNAME=$(ensure_valid_clustername "$CLUSTERNAME")
+                    CLUSTERNAME="$(ensure_valid_clustername "$1")"
                 else
                     usage addnode && exit 1
                 fi;;
@@ -63,11 +65,18 @@ function create() {
     p_debug "waiting for container to have IP address"
     output_to_var_or_fail IP -- wait_node_ip_address "$CLUSTERNAME" || return 4
 
-    # And now we will contextualize the container (if needed)
+    # And now we will contextualize the container
+    prepare_context "$CLUSTERNAME"
     if [ "$CONTEXTFOLDER" != "" ]; then
         p_debug "contextualization of $CLUSTERNAME"
-        prepare_context "$CLUSTERNAME" "$CONTEXTFOLDER"
-        execute_in_container "$CLUSTERNAME" "$CONTEXTSCRIPT"
+        stage_in_folder "$CLUSTERNAME" "$CONTEXTFOLDER" "$MLC_CONTEXT_SCRIPTS_REMOTE_FOLDER"
+    fi
+
+    # And contextualize it
+    if execute_context "$CLUSTERNAME"; then
+        p_debug "contextualization of $CLUSTERNAME suceeded"
+    else
+        p_error "failed to contextualize $CLUSTERNAME"
     fi
 
     p_out "$CLUSTERNAME successfully created"
@@ -75,6 +84,14 @@ function create() {
     # An extra function is to automatically enter into the cluster
     if [ "$ENTERCLUSTER" == "True" ]; then
         lxc exec $CLUSTERNAME bash
+    fi
+
+    # if the user has requested to delete the cluster, invoke the function to delete it
+    if [ "$DELETE" == "True" ]; then
+        if ! delete "$CLUSTERNAME"; then
+            p_error "failed to delete the cluster $CLUSTERNAME"
+            return 2
+        fi
     fi
 
     return 0

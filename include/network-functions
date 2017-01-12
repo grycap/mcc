@@ -1,4 +1,16 @@
 #!/bin/bash
+function nodename_valid() {
+    local N_NAME=$1
+
+    if [ "${N_NAME:0:4}" != "mlc-" ]; then
+        return 1
+    fi
+
+    if [[ "$N_NAME" =~ ^mlc-[a-f0-9]*-node[0-9]*$ ]]; then
+        return 0
+    fi
+    return 1
+}
 
 function clustername_from_nodename() {
     local N_NAME=$1
@@ -69,20 +81,6 @@ function wait_node_ip_address() {
     fi
     
     echo "$C_IP"
-    return 0
-}
-
-
-
-function XXXget_container_ip() {
-    local C_NAME=$1
-    local ADDR_IP
-
-    ADDR_IP=$($CURL_CMD/1.0/containers/$C_NAME/state -XGET | jq '.metadata.network["eth0"].addresses[] | select(."family"=="inet") | .address' 2> /dev/null)
-    if [ $? -ne 0 ]; then
-        return 1
-    fi    
-    echo "$ADDR_IP" | tr -d '"'
     return 0
 }
 

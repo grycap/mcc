@@ -16,6 +16,8 @@ source $(dirname $0)/operations/create
 source $(dirname $0)/operations/addnode
 source $(dirname $0)/operations/delete
 source $(dirname $0)/operations/list
+source $(dirname $0)/operations/enter
+source $(dirname $0)/operations/delnode
 
 function startup() {
     jq --version > /dev/null 2> /dev/null
@@ -43,26 +45,58 @@ function startup() {
     return 0
 }
 
+function stage_in_folder() {
+    local C_NAME=$(ensure_valid_clustername $1)
+    local L_FOLDER="$2"
+    local R_FOLDER="$3"
+
+    if [ -d "$L_FOLDER" ]; then
+        lxc file push -p $L_FOLDER/* $C_NAME/$R_FOLDER/ > /dev/null
+        if (($? != 0)); then
+            return 2
+        fi
+        return 0
+    fi
+    return 1
+}
+
 function prepare_context() {
     local C_NAME=$(ensure_valid_clustername $1)
-    local FOLDER=$2
 
-    if [ -e "$FOLDER" ]; then
-        lxc file push -p $CONTEXTSCRIPT_LOCAL $C_NAME/$CONTEXTSCRIPT_REMOTE > /dev/null 2> /dev/null && 
-            lxc file push -r -p $FOLDER/* $C_NAME/etc/context.d/ > /dev/null 2> /dev/null
-        if (($? != 0)); then
-            p_error "could not stage in folder $FOLDER"
-            return 1
-        fi
+#    lxc file push -r -p $MLC_CONTEXT_LOCAL_FOLDER $C_NAME/$MLC_CONTEXT_REMOTE_FOLDER > /dev/null 2> /dev/null
+#    if (($? != 0)); then
+#        p_error "could not stage in the MLC core folder $MLC_CONTEXT_LOCAL_FOLDER"
+#        return 1
+#    fi
+#
+#    if [ -e "$FOLDER" ]; then
+#        lxc file push -r -p $FOLDER/* $C_NAME/etc/context.d/ > /dev/null 2> /dev/null
+#        if (($? != 0)); then
+#            p_error "could not stage in folder $FOLDER"
+#            return 2
+#        fi
+#    fi
+
+    if ! stage_in_folder "$C_NAME" "$MLC_LOCAL_FOLDER" "$MLC_REMOTE_FOLDER"; then
+        p_error "failed to stage in folder $MLC_LOCAL_FOLDER"
+        return 1
     fi
+
     return 0
+}
+
+function execute_context() {
+    local C_NAME=$(ensure_valid_clustername $1)
+
+    execute_in_container "$C_NAME" "$MLC_REMOTE_FOLDER/$MLC_SCRIPT_CONTEXT"
+    return $?
 }
 
 function execute_in_container() {
     local C_NAME=$(ensure_valid_clustername $1)
-    local COMMAND="$2"
+    shift
 
-    lxc exec $C_NAME "$COMMAND"
+    lxc exec $C_NAME $@
     return $?
 }
 
@@ -247,13 +281,15 @@ add_help_cmd "list" "lists the clusters that are running"
 add_help_cmd "addnode" "adds nodes to one cluster"
 add_help_cmd "create" "creates one cluster"
 add_help_cmd "delete" "deletes one cluster"
+add_help_cmd "enter" "enter in a running cluster"
+add_help_cmd "delnode" "deletes nodes from the cluster"
 
 n=0
 COMMAND=
 while [ $n -lt ${#ARR[@]} -a "$COMMAND" == "" ]; do
     PARAM="${ARR[$n]}"
     case "$PARAM" in
-        list|addnode|create|delete) COMMAND="$PARAM";;
+        delnode|enter|list|addnode|create|delete) COMMAND="$PARAM";;
         --help | -h) usage "" && exit 0;;
         *) usage && exit 1;;
     esac

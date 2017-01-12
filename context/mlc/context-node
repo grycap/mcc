@@ -1,11 +1,11 @@
 #!/bin/bash
 
-BASEDIR=/etc/context.d
+BASEDIR=/etc/mlc.d
 {
 if [ -d $BASEDIR ]; then
     for scriptname in $BASEDIR/*; do
         if [ ! -d "$scriptname" -a -x "$scriptname" ]; then
-            stdbuf -oL -eL $scriptname > /var/log/context.log 2>/var/log/context.log
+            stdbuf -oL -eL $scriptname > /var/log/mlc.log 2>/var/log/mlc.log
             if [ $? -eq 0 ]; then
                 echo -e "Execution of $scriptname [\e[32msucceeded\e[0m]"
             else

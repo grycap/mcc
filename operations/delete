@@ -9,35 +9,48 @@ function delete_cluster() {
         return 1
     fi
 
-    p_debug "getting the nodes of cluster $CLUSTERNAME"
-
-    local NODES=
-    NODES=$(get_nodes_of_cluster "$CLUSTERNAME")
-
-    if (($? != 0)); then
-        p_error "could not get the list of nodes from the cluster"
-        return 1
+    # TODO: could use delnode function to delete all the nodes
+    #p_debug "getting the nodes of cluster $CLUSTERNAME"
+    #
+    #local NODES=
+    #NODES=$(get_nodes_of_cluster "$CLUSTERNAME")
+    #
+    #if (($? != 0)); then
+    #    p_error "could not get the list of nodes from the cluster"
+    #    return 1
+    #fi
+    #
+    #local NODENAME=
+    #local FAILED=0
+    #local ERR_STR=
+    #while read NODENAME; do
+    #    if [ "$NODENAME" != "" ]; then
+    #        p_info "stopping the container $NODENAME"
+    #        ERR_STR=$(lxc stop "$NODENAME" 2>&1)
+    #        if (($? != 0)); then
+    #            p_error "could not stop node $NODENAME ($ERR_STR)"
+    #            FAILED=$((FAILED+1))
+    #        else
+    #            p_debug "container $NODENAME successfully stopped"
+    #        fi
+    #    fi
+    #done <<< "$NODES"
+    #if [ "$FORCE" != "True" ]; then
+    #    if [((]FAILED>0)); then
+    #        p_error "failed to stop some nodes from cluster $CLUSTERNAME"
+    #        return 2
+    #    fi
+    #fi
+    
+    local FAILED=False
+    if ! delnode "$CLUSTERNAME" --all; then
+        p_error "some errors ocurred when deleting the nodes from cluster $CLUSTERNAME"
+        FAILED=True
     fi
 
-    local NODENAME=
-    local FAILED=0
-    local ERR_STR=
-    while read NODENAME; do
-        if [ "$NODENAME" != "" ]; then
-            p_info "stopping the container $NODENAME"
-            ERR_STR=$(lxc stop "$NODENAME" 2>&1)
-            if (($? != 0)); then
-                p_error "could not stop node $NODENAME ($ERR_STR)"
-                FAILED=$((FAILED+1))
-            else
-                p_debug "container $NODENAME successfully stopped"
-            fi
-        fi
-    done <<< "$NODES"
-
     if [ "$FORCE" != "True" ]; then
-        if ((FAILED>0)); then
-            p_error "failed to stop $FAILED nodes from cluster $CLUSTERNAME"
+        if [ "$FAILED" == "True" ]; then
+            p_error "failed to stop some nodes from cluster $CLUSTERNAME"
             return 2
         fi
     fi
@@ -100,7 +113,7 @@ function delete() {
     add_help_cmd "--all|-A" "deletes all the clusters"
     while (( $# > 0 )); do
         case "$1" in
-            --delete-network|-d)        DELETENETWORK=False;;
+            --no-delete-network|-n)        DELETENETWORK=False;;
             --force|-f)                 FORCE=True;;
             --help|-h)                  usage delete && exit 0;;
             --all|-A)                   ALL=True;;
