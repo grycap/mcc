@@ -1,0 +1,87 @@
+#!/bin/bash
+
+CONTAINER_PREFIX="mlc-"
+NETWORK_PREFIX="nw-"
+CONTAINER_PREFIX_LEN=${#CONTAINER_PREFIX}
+NETWORK_PREFIX_LEN=${#NETWORK_PREFIX}
+
+function _NAMING__nodename_valid() {
+    # * Checks whether the name of the node is valid or not
+    local N_NAME=$1
+
+    # If it matches our naming scheme, it is valid
+    if [[ "$N_NAME" =~ ^$CONTAINER_PREFIX[a-f0-9]*-node[0-9]*$ ]]; then
+        return 0
+    fi
+
+    # Otherwise it is invalid
+    return 1
+}
+
+function _NAMING__clustername_valid() {
+    # * Checks whether the name of the cluster is valid or not
+    local N_NAME=$1
+
+    # If it matches our naming scheme, it is valid
+    if [[ "$N_NAME" =~ ^$CONTAINER_PREFIX[a-f0-9]*$ ]]; then
+        return 0
+    fi
+
+    # Otherwise it is invalid
+    return 1
+}
+
+function _NAMING__clustername_from_nodename() {
+    # * Returns the cluster name from the node name (We assume that the name of the node is valid)
+    local N_NAME=$1
+
+    # This is the case in which the nodename is the frontend
+    if [[ "$N_NAME" =~ ^$CONTAINER_PREFIX[a-f0-9]*$ ]]; then
+        echo "$N_NAME"
+        return 0
+    fi
+
+    # This is the case in which the nodename is a working node
+    if [[ "$N_NAME" =~ ^$CONTAINER_PREFIX[a-f0-9]*-node[0-9]*$ ]]; then
+        echo "${N_NAME%-node*}"
+        return 0
+    fi
+
+    # For completion purposes, if it was not valid, it would return false
+    return 1
+}
+
+function _NAMING__get_cluster_network_name() {
+    # * This function gets the name of a existing container that is part of a cluster and gets the
+    #   name of the network to which it should be connected (according to the naming scheme)
+    #   (we assume that the node name is valid)
+    local C_NAME=$(_NAMING__clustername_from_nodename "$1")
+    echo "nw-${C_NAME:${CONTAINER_PREFIX_LEN}}"
+    return 0 
+}
+
+function _NAMING__get_nodeid_from_nodename() {
+    # * This function returns the nodeid from the nodename (it assumes that the nodename is valid)
+    local N_NAME=$1
+
+    # We assume that the name follows the naming scheme
+    echo "${N_NAME#${CONTAINER_PREFIX}*-}"
+    return 0
+}
+
+function _NAMING__ensure_valid_clustername() {
+    # This function makes that a cluster name is valid
+    local C_NAME="$1"
+
+    if [ "$C_NAME" == "" ]; then
+        C_NAME="${CONTAINER_PREFIX}$(cat /proc/sys/kernel/random/uuid | sed 's/.*-\([a-f0-9]*\)$/\1/')"
+    fi
+
+    # If the name for the cluster is not valid, we will suppose that the user forgot to include the prefix
+    if _NAMING__clustername_valid "$C_NAME"; then
+        echo "$C_NAME"
+    else
+        echo "${CONTAINER_PREFIX}$C_NAME"
+    fi
+}
+

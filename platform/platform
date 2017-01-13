@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# De momento simplemente podria haber un "plugin/lxd.d" en el que se implemente todo lo dependiente de la plataforma.
+# En todo caso mas adelante (si esto adquiere mas entidad), ya se separaran las redes de la plataforma y se separa la
+#   creacion del contenedor con la conexion a la red
+
+function _NETWORK_get_node_ip() {
+    local C_NAME=$1
+    local N_NAME=$2
+
+    local DEVICE
+    output_to_var_or_fail DEVICE "could not find a device for network $N_NAME in container $C_NAME" \
+        eval "$CURL_CMD/1.0/containers/$C_NAME -XGET | jq  '.metadata.config.\"volatile.$N_NAME.name\"' | tr -d '\"'" || return 1
+
+    if [ "$DEVICE" == "null" ]; then
+        p_error "unexpectedly node $C_NAME is not attached to network $N_NAME"
+        return 2
+    fi
+
+    local IP_ADDR
+    output_to_var_or_fail IP_ADDR "failed to obtain the IP address for device $DEVICE from container $C_NAME" \
+        eval "$CURL_CMD/1.0/containers/$C_NAME/state -XGET | jq '.metadata.network[\"$DEVICE\"].addresses[] | select(.\"family\"==\"inet\") | .address'" ||
+            return 3
+
+    echo "$IP_ADDR" | tr -d '"'
+    return 0    
+}

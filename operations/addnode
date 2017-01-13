@@ -1,13 +1,4 @@
 #!/bin/bash
-function get_nodeid_from_nodename() {
-    local NODENAME=$1
-
-    nodename_valid "$NODENAME" || return 1
-
-    echo "${NODENAME#mlc-*-}"
-    return 0
-}
-
 function generate_new_node_id() {
     # This function generates a name for a new node in the cluster. It will fail if the cluster does not exist or
     #   if it cannot allocate a new node name (probably because the maximum amount of nodes has been reached)

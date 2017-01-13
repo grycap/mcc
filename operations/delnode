@@ -61,7 +61,7 @@ function delnode() {
                 p_debug "container $NODENAME successfully stopped"
 
                 # Finally we MUST remove the node from the front-end    
-                NODEID="$(get_nodeid_from_nodename $NODENAME)"
+                NODEID="$(_NAMING__get_nodeid_from_nodename $NODENAME)"
 
                 p_debug "removing node $NODENAME from the cluster $CLUSTERNAME"
                 if ! execute_in_container "$CLUSTERNAME" "$MLC_REMOTE_FOLDER/$MLC_SCRIPT_DELNODE" "$NODENAME" "255.255.255.255" "${NODEID}" "${NODENAME}" "${NODEID}.${CLUSTERNAME}"; then

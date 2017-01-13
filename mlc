@@ -19,6 +19,8 @@ source $(dirname $0)/operations/list
 source $(dirname $0)/operations/enter
 source $(dirname $0)/operations/delnode
 
+source $(dirname $0)/lib/naming
+
 function startup() {
     jq --version > /dev/null 2> /dev/null
     if (($?!=0)); then
@@ -98,18 +100,6 @@ function execute_in_container() {
 
     lxc exec $C_NAME $@
     return $?
-}
-
-function ensure_valid_clustername() {
-    if [ "$1" == "" ]; then
-        echo ""
-    else
-        if [ "${1:0:4}" == "mlc-" ]; then
-            echo "$1"
-        else
-            echo "mlc-$1"
-        fi
-    fi
 }
 
 function ensure_image_exists() {

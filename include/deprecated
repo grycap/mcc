@@ -1,0 +1,69 @@
+#!/bin/bash
+function nodename_valid() {
+    local N_NAME=$1
+
+    if [ "${N_NAME:0:4}" != "mlc-" ]; then
+        return 1
+    fi
+
+    if [[ "$N_NAME" =~ ^mlc-[a-f0-9]*-node[0-9]*$ ]]; then
+        return 0
+    fi
+    return 1
+}
+
+function clustername_from_nodename() {
+    local N_NAME=$1
+
+    if [ "${N_NAME:0:4}" != "mlc-" ]; then
+        return 1
+    fi
+
+    if [[ "$N_NAME" =~ ^mlc-[a-f0-9]*$ ]]; then
+        echo "$N_NAME"
+        return 0
+    fi
+
+    if [[ "$N_NAME" =~ ^mlc-[a-f0-9]*-node[0-9]*$ ]]; then
+        echo "${N_NAME%-node*}"
+        return 0
+    fi
+    return 1
+}
+
+function get_cluster_network_name() {
+    # This function gets the name of a existing container that is part of a cluster and gets the
+    #   name of the network to which it should be connected (according to its name)
+    local C_NAME=
+
+    C_NAME=$(clustername_from_nodename "$1")
+    if (($?!=0)); then
+        p_error "$1 is not a valid node name"
+        return 1
+    fi
+
+    echo "nw-${C_NAME:4}"
+    return 0 
+}
+
+function get_nodeid_from_nodename() {
+    local NODENAME=$1
+
+    nodename_valid "$NODENAME" || return 1
+
+    echo "${NODENAME#mlc-*-}"
+    return 0
+}
+
+function ensure_valid_clustername() {
+    if [ "$1" == "" ]; then
+        echo ""
+    else
+        if [ "${1:0:4}" == "mlc-" ]; then
+            echo "$1"
+        else
+            echo "mlc-$1"
+        fi
+    fi
+}
+
