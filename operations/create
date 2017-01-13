@@ -3,20 +3,19 @@
 function create() {
     local NODECOUNT=1
     local FRONTENDIMAGE=ubuntu:
-    local UUID=$(cat /proc/sys/kernel/random/uuid | sed 's/.*-\([a-f0-9]*\)$/\1/')
     local CLUSTERNAME
     local NETWORKNAME
     local ENTERCLUSTER
     local CONTEXTFOLDER
     local DELETE
 
-    reset_help
-    add_help_cmd "<name>" "name of the cluster (default: auto generated name). The name of the cluster MUST follow the format mlc-<name>. If it is not respected, mlc- will be prepended"
-    add_help_cmd "--front-end-image|-f <image>" "name of the image to be used for the front-end (default: ubuntu:latest)"
-    add_help_cmd "--help|-h" "shows this help and exists"
-    add_help_cmd "--enter-cluster|-e" "enters in the cluster, in an interactive session, if it is successfully created"
-    add_help_cmd "--context-folder|-c" "folder that contains the scripts to be executed on contextualization"
-    add_help_cmd "--delete-on-exit|-D" "deletes the cluster when exiting the interactive session (implies -e)"
+    _HELP__reset_help
+    _HELP__add_help_cmd "<name>" "name of the cluster (default: auto generated name). The name of the cluster MUST follow the format mlc-<name>. If it is not respected, mlc- will be prepended"
+    _HELP__add_help_cmd "--front-end-image|-f <image>" "name of the image to be used for the front-end (default: ubuntu:latest)"
+    _HELP__add_help_cmd "--help|-h" "shows this help and exists"
+    _HELP__add_help_cmd "--enter-cluster|-e" "enters in the cluster, in an interactive session, if it is successfully created"
+    _HELP__add_help_cmd "--context-folder|-c" "folder that contains the scripts to be executed on contextualization"
+    _HELP__add_help_cmd "--delete-on-exit|-D" "deletes the cluster when exiting the interactive session (implies -e)"
 
     while (( $# > 0 )); do
         case "$1" in
@@ -30,11 +29,11 @@ function create() {
             --delete-on-exit|-D)    ENTERCLUSTER=True    
                                     DELETE=True;;
 
-            --help|-h)          usage create && exit 0;;
+            --help|-h)          _HELP__usage create && exit 0;;
             *)  if [ "$CLUSTERNAME" == "" ]; then 
                     CLUSTERNAME="$1"
                 else
-                    usage addnode && exit 1
+                    _HELP__usage addnode && exit 1
                 fi;;
         esac
         shift
@@ -47,21 +46,23 @@ function create() {
     CLUSTERNAME="$(_NAMING__ensure_valid_clustername "$CLUSTERNAME")"
     NETWORKNAME="$(_NAMING__get_cluster_network_name "$CLUSTERNAME")"
 
-    # If the cluster does not exist, fail
-    if cluster_exists "$CLUSTERNAME"; then
+    # If the cluster exists, fail
+    if _CLUSTER__exists "$CLUSTERNAME"; then
         p_error "cluster $CLUSTERNAME already exists"
-        return 1
+        return 2
     fi
     
     # Finally we will launch the container
-    if ! launch_container "$CLUSTERNAME" "$FRONTENDIMAGE" "$NETWORKNAME"; then
+    if ! _CONTAINER__launch "$CLUSTERNAME" "$FRONTENDIMAGE" "$NETWORKNAME"; then
         p_error "failed to launch frontend $CLUSTERNAME"
         return 4
     fi
 
     # If the container has been launched, we will wait for its IP address
     p_debug "waiting for container to have IP address"
-    output_to_var_or_fail IP -- wait_node_ip_address "$CLUSTERNAME" || return 4
+    output_to_var_or_fail IP -- _MLC__wait_ip_address "$CLUSTERNAME" || return 4
+
+    p_debug "cluster $CLUSTERNAME has IP address $IP"
 
     # And now we will contextualize the container
     prepare_context "$CLUSTERNAME"

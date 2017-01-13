@@ -1,0 +1,242 @@
+#!/bin/bash
+
+function element_in_list() {
+    #
+    # $ Usage: element_in_list <element> <space separated list>
+    #
+    # Returns true in case that the substring "element" is in the list
+    # * this is useful to search elements like "a" in a list "c d aa a f b", 
+    #   but also works for elements such as "d aa"
+    local ELEMENT="$1"
+    local LIST="$2"
+
+    if [[ "$LIST" =~ (^|[[:blank:]]+)$ELEMENT([[:blank:]]+|$) ]]; then
+        return 0
+    fi
+    return 1
+}
+
+function source_folder() {
+    #
+    # $ Usage: source_folder <folder> <filter>
+    #
+    # This function sources all the files that meet one <filter> in a <folder>
+    local FOLDER="$1"
+    local FILTER=$2
+
+    if [ ! -d "$FOLDER" ]; then
+        p_error "folder $FOLDER does not exist"
+        return 1
+    fi
+
+    if [ "$FILTER" == "" ]; then
+        FILTER='*'
+    fi
+
+    # Now source the files
+    local FILE
+    for FILE in "${FOLDER}/"${FILTER}; do
+        source "$FILE"
+    done
+    return 0
+}
+
+function execute_command() {
+    #
+    # $ Usage: execute_command <commandline>
+    #
+    # This function is intended to enable a "simulation" of an application. The idea will be just to not to execute
+    #   the commands or to establish a proxy, etc.
+    echo "EC: $@" >> /tmp/ffff
+    $@
+    return $?
+}
+
+function _NEW__retry_while() {
+    #
+    # $ Usage: retry_while <max retries> <output string to retry> commandline
+    #
+    # This function tries to execute one command up to <max retries> times, or until the output of the
+    #   commandline differs the <output string>.
+    #
+    # * Outputs the new output of the commandline
+
+    # Grab the parameters
+    local n=1
+    local max=$1
+    local delay=$2
+    local str_condition=$3
+    local STR_RET
+    shift
+    shift
+    shift
+
+    echo "RW: $@" >> /tmp/ffff 
+    while true; do
+
+        # Execute the command and grab the output
+        STR_RET=$(execute_command $@ 2>&1)
+        RESULT=$?
+
+        # If the command failed or its output is still the output string, then try to wait to try
+        #   a new execution.
+        if [ $RESULT -ne 0 -o "$STR_RET" == "$str_condition" ]; then
+            ((n++))
+            if [ $n -le $max ]; then
+                sleep $delay
+            else
+                return -1
+            fi
+        else
+            # If the execution was successfull AND the output differs the output string, the output
+            #   the new string and return
+            echo "$STR_RET"
+            return 0
+        fi
+    done
+}
+
+function retry_execute_command {
+    #
+    # $ Usage: retry_execute_command <max retries> <delay between retries> <commandline>
+    #
+    # Executes the commandline until it succedes (returns 0) or the maximum number of retries has been reached
+    #
+    local n=1
+    local max=$1
+    local delay=$2
+    shift
+    shift
+    while true; do
+        if execute_command $@; then
+            return $?
+        else
+            if [[ $n -lt $max ]]; then
+                ((n++))
+                sleep $delay;
+            else
+                return -1
+            fi
+        fi
+    done
+}
+
+function output_to_var_or_fail() {
+    #
+    # $ Usage: output_to_var_or_fail <varname> <fail message> commandline
+    #
+    # This function executes the commandline provided at the end. In case that the result is successfull (i.e. returns 0)
+    #   the output is assigned to the variable and returns 0. Otherwise the variable keeps its initial value and the return
+    #   of the execution of the commandline is returned
+    #
+    # * If the fail message is --, then the output of the command execution is shown.
+    #
+    # * Advice: only simple commandlines are supported. Pipes and redirections are not currently supported.
+
+    # Get the var name and the message
+    local output result
+    local varname=$1
+    local fail_msg=$2
+    shift
+    shift
+
+    # Execute the commandline and grab the result
+    echo "OVOF $@" >> /tmp/ffff
+    output="$(execute_command $@)"
+    result=$?
+
+    # If the result is nonzero, will output the fail message
+    if ((result != 0)); then
+        if [ "$fail_msg" == "--" ]; then
+            p_error "$output"
+        else
+            p_error "$fail_msg ($output)"        
+        fi
+        return $result
+    fi
+
+    # Set the output to the variable and return zero
+    read -d '\0' $varname <<< "$output"
+    return 0
+}
+
+function exec_or_fail() {
+    #
+    # $ Usage: exec_or_fail <message> <commandline>
+    #
+    # Executes the commandline and prints the message if it fails
+    local MESSAGE=$1
+    shift
+
+    # Execute the commandline and grab the result
+    local output result
+    output="$(execute_command $@ 2>&1)"
+    result=$?
+
+    if ((result!=0)); then
+        if [ "$fail_msg" == "--" ]; then
+            p_error "$output"
+        else
+            p_error "$MESSAGE ($output)"        
+        fi
+    fi
+    return $result
+}
+
+function exec_and_fail() {
+    #
+    # $ Usage: exec_and_fail <message> <commandline>
+    #
+    # Executes the commandline and prints the message if it does not fails
+    local MESSAGE=$1
+    shift
+
+    # Execute the commandline and grab the result
+    local output result
+    output="$(execute_command $@ 2>&1)"
+    result=$?
+
+    if ((result==0)); then
+        if [ "$fail_msg" == "--" ]; then
+            p_error "$output"
+        else
+            p_error "$MESSAGE ($output)"        
+        fi
+    fi
+    return $result
+}
+
+
+function p_debug() {
+    echo "[DEBUG] $@"
+}
+
+function p_info() {
+    echo "[INFO] $@"
+}
+
+function p_out() {
+    echo "$@"
+}
+
+function p_error() {
+    echo "[ERROR] $@" >&2
+}
+
+function p_error_s() {
+    if [ "$@" != "" ]; then
+        echo "[ERROR] $@" >&2
+    fi
+}
+
+function ensure_valid_folder() {
+    local FOLDER=$1
+    if [ "$FOLDER" == "" ]; then
+        return 0
+    fi
+    if [ ! -d "$FOLDER" ]; then
+        p_error "path $FOLDER is not a folder"
+        return 1
+    fi
+    return 0
+}

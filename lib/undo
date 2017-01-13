@@ -1,0 +1,30 @@
+#!/bin/bash
+declare UNDO_CMDS=
+
+function _UNDO__clear() {
+    #
+    # $ Usage: _UNDO__clear
+    #
+    # Clears the list of commands to undo an operation
+    UNDO_CMDS=
+}
+
+function _UNDO__add_undo_cmdline() {
+    #
+    # $ Usage: _UNDO__add_undo_cmdline <command line> 
+    #
+    # Appends a new command to undo a situation
+    UNDO_CMDS="${UNDO_CMDS}$@
+"
+}
+
+function _UNDO__execute() {
+    #
+    # $ Usage: _UNDO__execute
+    #
+    # Executes the list of commands that revert a situation, in the same order that they were issued
+    local LINE
+    while read LINE; do
+        execute_command 5 5 "$LINE"
+    done <<< "$(echo "${UNDO_CMDS}" | tac - | tail -n +2)"
+}

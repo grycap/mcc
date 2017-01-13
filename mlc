@@ -1,32 +1,15 @@
 #!/bin/bash
-# TODO: 
-# TODO: ver si se normaliza el nombre de las redes autocreadas
-#     * si se mata un contenedor y se pide que se eliminen sus redes, se podrian eliminar otras redes
-#       utilizar un nombre normalizado permitiria no eliminar todas
-#   > * otra opcion seria hacer que siempre se crease una red propia para el cluster y solo eliminar esa red
-#
-# TODO: ver si se crea un perfil automaticamente para evitar que se añadan otros interfaces
-#     * tambien se deberia poder permitir utilizar un perfil base, pero entonces habria que ver si cuando
-#       se añade una red nueva, si coge IP por DHCP o si se ha de forzar si no es el eth0
+source includes
 
-source $(dirname $0)/config
-source $(dirname $0)/include/common-functions
-source $(dirname $0)/include/network-functions
-source $(dirname $0)/operations/create
-source $(dirname $0)/operations/addnode
-source $(dirname $0)/operations/delete
-source $(dirname $0)/operations/list
-source $(dirname $0)/operations/enter
-source $(dirname $0)/operations/delnode
-
-source $(dirname $0)/lib/naming
-
-function startup() {
+function check_dependencies() {
+    # We need jq installed
     jq --version > /dev/null 2> /dev/null
     if (($?!=0)); then
         p_error "jq is not properly installed"
         return 1
     fi
+
+    # Now check the version of LXD (at least, version 2)
     local LXC
     LXC=$(lxc --version 2> /dev/null)
     if (($?!=0)); then
@@ -39,6 +22,8 @@ function startup() {
         p_error "this only works if lxc version is greater or equal to 2"
         return 3
     fi
+
+    # Finally check the CURL command (the CURL command points to the lxd endpoint)
     $CURL_CMD > /dev/null 2> /dev/null
     if (($?!=0)); then
         p_error "could not contact to the lxd server using curl (needs curl version 7.45 or later)"
@@ -47,212 +32,7 @@ function startup() {
     return 0
 }
 
-function stage_in_folder() {
-    local C_NAME=$(ensure_valid_clustername $1)
-    local L_FOLDER="$2"
-    local R_FOLDER="$3"
-
-    if [ -d "$L_FOLDER" ]; then
-        lxc file push -p $L_FOLDER/* $C_NAME/$R_FOLDER/ > /dev/null
-        if (($? != 0)); then
-            return 2
-        fi
-        return 0
-    fi
-    return 1
-}
-
-function prepare_context() {
-    local C_NAME=$(ensure_valid_clustername $1)
-
-#    lxc file push -r -p $MLC_CONTEXT_LOCAL_FOLDER $C_NAME/$MLC_CONTEXT_REMOTE_FOLDER > /dev/null 2> /dev/null
-#    if (($? != 0)); then
-#        p_error "could not stage in the MLC core folder $MLC_CONTEXT_LOCAL_FOLDER"
-#        return 1
-#    fi
-#
-#    if [ -e "$FOLDER" ]; then
-#        lxc file push -r -p $FOLDER/* $C_NAME/etc/context.d/ > /dev/null 2> /dev/null
-#        if (($? != 0)); then
-#            p_error "could not stage in folder $FOLDER"
-#            return 2
-#        fi
-#    fi
-
-    if ! stage_in_folder "$C_NAME" "$MLC_LOCAL_FOLDER" "$MLC_REMOTE_FOLDER"; then
-        p_error "failed to stage in folder $MLC_LOCAL_FOLDER"
-        return 1
-    fi
-
-    return 0
-}
-
-function execute_context() {
-    local C_NAME=$(ensure_valid_clustername $1)
-
-    execute_in_container "$C_NAME" "$MLC_REMOTE_FOLDER/$MLC_SCRIPT_CONTEXT"
-    return $?
-}
-
-function execute_in_container() {
-    local C_NAME=$(ensure_valid_clustername $1)
-    shift
-
-    lxc exec $C_NAME $@
-    return $?
-}
-
-function ensure_image_exists() {
-    local IMAGENAME=$1
-
-    if [ "$IMAGENAME" == "" ]; then
-        p_error "image name is blank"
-        return 2
-    fi
-
-    local ERR
-    ERR=$(execute_command lxc image show $IMAGENAME 2>&1)
-
-    if (( $? != 0 )); then
-        p_error "image $IMAGENAME does not exist"
-        return 1
-    else
-        p_debug "using image $IMAGENAME"
-        return 0
-    fi
-}
-
-function get_container_list() {
-    local CONTAINER_STR=$($CURL_CMD/1.0/containers -XGET | jq ".metadata[]" | tr -d '"')
-    if [ $? -ne 0 ]; then
-        return 1
-    fi
-
-    local CNAME
-    while read CNAME; do
-        CNAME="${CNAME:16}"
-        if [ "${CNAME:0:4}" == "mlc-" ]; then
-            echo "$CNAME"
-        fi
-    done <<< "$CONTAINER_STR"
-    return 0
-}
-
-function ensure_container_not_exists() {
-    local C_NAME=$1
-
-    if [ "$C_NAME" == "" ]; then
-        p_error "container name is blank"
-        return 1
-    fi
-
-    $CURL_CMD/1.0/containers/$C_NAME -XGET > /dev/null 2> /dev/null
-    if (( $? == 0 )); then
-        p_error "container already exists"
-        return 2
-    fi
-
-    return 0
-}
-
-function cluster_exists() {
-    local CLUSTERNAME=$(ensure_valid_clustername $1)
-
-    if [ "$CLUSTERNAME" == "" ]; then
-        p_error "a name for the cluster must be provided"
-        return 1
-    fi
-
-    local CLUSTERS
-    CLUSTERS=$(get_cluster_list)
-    if [ $? -ne 0 ]; then
-        p_error "could not get the list of clusters cluster does not exist"
-        return 2
-    fi
-
-    local CLUSTERS_FILTERED=$(echo "$CLUSTERS" | grep "$CLUSTERNAME" | tr -d ' ')
-    while read C_NAME; do
-        if [ "$C_NAME" == "$CLUSTERNAME" ]; then
-            return 0;
-        fi
-    done <<< "$CLUSTERS"
-
-    p_error "the cluster '$CLUSTERNAME' does not exist"
-    return 1
-}
-
-function get_cluster_list() {
-    local CONTAINER_STR
-    output_to_var_or_fail CONTAINER_STR "could not get the list of containers" get_container_list ||
-        return 1
-
-    local CNAME CNAME_C
-    while read CNAME; do
-        CNAME_C="${CNAME/mlc-*-/}"
-        if [ "$CNAME_C" == "$CNAME" ]; then
-            echo "$CNAME"
-        fi
-    done <<< "$CONTAINER_STR"
-    return 0
-}
-
-function launch_container() {
-    local C_NAME=$1
-    local C_IMAGE=$2
-    local C_NETWORK=$3
-
-    p_info "creating host $C_NAME using image $C_IMAGE in network $C_NETWORK"
-
-    ensure_container_not_exists "$C_NAME" || return 1
-    ensure_network_exists "$C_NETWORK" "True" || return 2
-    ensure_image_exists "$C_IMAGE" || return 3
-
-    execute_command lxc launch -n "$C_NETWORK" -e $C_IMAGE "$C_NAME" > /dev/null
-    if (( $? == 0 )); then
-        p_debug "container $C_NAME successfully launched"
-        # As we are using ephemeral containers, we do not need to delete them
-        add_undo_cmdline lxc stop "$C_NAME"
-        return 0
-    else
-        return 4
-    fi
-}
-
-function get_nodes_of_cluster() {
-    local CLUSTERNAME=$(ensure_valid_clustername $1)
-
-    local CONTAINER_STR
-    output_to_var_or_fail CONTAINER_STR "could not get the list of containers" get_container_list ||
-        return 1
-
-    local CNAME CNAME_C
-    while read CNAME; do
-        if [[ "$CNAME" =~ ^$CLUSTERNAME-node[0-9]*$ ]]; then
-            echo "$CNAME"
-        fi
-    done <<< "$CONTAINER_STR"
-    return 0
-}
-
-function get_cluster_info() {
-    local CLUSTERNAME=$(ensure_valid_clustername $1)
-
-    local NODES=
-    output_to_var_or_fail NODES "could not get the list of nodes from the cluster $CLUSTERNAME" get_nodes_of_cluster "$CLUSTERNAME" || 
-        return 1
-
-    local NETWORKS
-    output_to_var_or_fail NETWORKS "could not obtain the networks associated to $CLUSTERNAME" get_networks_for_container "$CLUSTERNAME" || 
-        return 2
-
-    local IPS
-    output_to_var_or_fail IPS "could obtain the ip addresses associated to $CLUSTERNAME" get_node_ip "$CLUSTERNAME" || 
-        return 3
-    
-    echo "$CLUSTERNAME;$NETWORKS;$IPS;$NODES"
-    return 0
-}
-
+# Parse the parameters and split the single - parameters into several ones (i.e. -ab -> -a -b)
 n=0
 while (( $# > 0 )); do
     if [ "${1:0:1}" == "-" -a "${1:1:1}" != "-" ]; then
@@ -267,13 +47,15 @@ while (( $# > 0 )); do
     shift
 done
 
-add_help_cmd "list" "lists the clusters that are running"
-add_help_cmd "addnode" "adds nodes to one cluster"
-add_help_cmd "create" "creates one cluster"
-add_help_cmd "delete" "deletes one cluster"
-add_help_cmd "enter" "enter in a running cluster"
-add_help_cmd "delnode" "deletes nodes from the cluster"
+# Add the basic help
+_HELP__add_help_cmd "list" "lists the clusters that are running"
+_HELP__add_help_cmd "addnode" "adds nodes to one cluster"
+_HELP__add_help_cmd "create" "creates one cluster"
+_HELP__add_help_cmd "delete" "deletes one cluster"
+_HELP__add_help_cmd "enter" "enter in a running cluster"
+_HELP__add_help_cmd "delnode" "deletes nodes from the cluster"
 
+# Parse the commandline
 n=0
 COMMAND=
 while [ $n -lt ${#ARR[@]} -a "$COMMAND" == "" ]; do
@@ -286,8 +68,10 @@ while [ $n -lt ${#ARR[@]} -a "$COMMAND" == "" ]; do
     n=$(($n+1))
 done
 
-startup || exit -1
+# If the dependencies are not met, we will exit
+check_dependencies || exit -1
 
+# Finally execute the proper command
 if [ "$COMMAND" != "" ]; then
     $COMMAND "${ARR[@]:$n}"
     if [ $? -ne 0 ]; then
@@ -295,5 +79,5 @@ if [ "$COMMAND" != "" ]; then
         execute_undo_cmds
     fi
 else
-    echo "no command issued" && usage && exit 1
+    echo "no command issued" && usage "" && exit 1
 fi

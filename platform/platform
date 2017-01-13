@@ -1,13 +1,293 @@
 #!/bin/bash
+# [ "$PLATFORM_INCLUDED" != "" ] && return
+# PLATFORM_INCLUDED=1
+#
+# MLC_FOLDER=/home/calfonso/Programacion/git/my_lxd_cluster/
+# source ../includes
 
-# De momento simplemente podria haber un "plugin/lxd.d" en el que se implemente todo lo dependiente de la plataforma.
-# En todo caso mas adelante (si esto adquiere mas entidad), ya se separaran las redes de la plataforma y se separa la
-#   creacion del contenedor con la conexion a la red
+function _MLC__get_container_list() {
+    # $ Usage: _MLC__get_container_list
+    # 
+    # Returns the list of containers in the platform (those that start by our CONTAINER_PREFIX)
+    _CONTAINER__get_list "${CONTAINER_PREFIX}.*"
+}
 
-function _NETWORK_get_node_ip() {
+function _MLC__wait_ip_address() {
+    #
+    # $ Usage: _MLC__wait_ip_address <container>
+    #
+    # Waits for the container to have an IP address in the network of the cluster. It retries 5 times
+    #
+    local C_NAME=$1
+    local C_NETWORK=$(_NAMING__get_cluster_network_name $C_NAME)
+    local C_IP
+
+    # * cannot use output_to_var_or_fail because of the blank parameters
+    C_IP=$(_NEW__retry_while 10 1 "" _NETWORK__get_node_ip "$C_NAME" "$C_NETWORK")
+    if (($?!=0)); then
+        p_error "could not get IP address for container $C_NAME"
+        return 1
+    fi
+    echo "$C_IP"
+    return 0
+}
+
+function _MLC__launch_container() {
+    #
+    # $ Usage: _MLC__launch_container <container> <image> <context folder> -- <local folder> <remote folder> ...
+    #
+    local C_NAME=$1
+    local IMAGENAME=$2
+
+    local NETWORKNAME
+    NETWORKNAME="$(_NAMING__get_cluster_network_name "$C_NAME")"
+
+    # Finally we will launch the container
+    if ! _CONTAINER__launch "$C_NAME" "$IMAGENAME" "$NETWORKNAME"; then
+        p_error "failed to launch frontend $C_NAME"
+        return 1
+    fi
+
+    # If the container has been launched, we will wait for its IP address
+    p_debug "waiting for container to have IP address"
+    output_to_var_or_fail IP -- _MLC__wait_ip_address "$C_NAME" || return 2
+
+    p_debug "container $C_NAME has IP address $IP"
+
+    # Now, the contextualization
+    # * it has to upload the *context folder" to /etc/mlc.d
+    # * then it uploads the other folders (if they are provided)
+    # * finally, call the context-node script
+    return 0
+}
+
+function _CONTAINER__execute() {
+    # $ Usage: _CONTAINER__execute <container> <commandline>
+    # 
+    # Executes the <commandline> inside the <container>
+    local C_NAME=$1
+    shift
+
+    lxc exec $C_NAME $@
+    return $?
+}
+
+function _CONTAINER__get_list() {
+    #
+    # $ Usage: _CONTAINER__get_list <prefix>
+    #
+    local FILTER="$1"
+    if [ "$FILTER" == "" ]; then
+        FILTER='.*'
+    fi
+
+    # Get the list of containers
+    local CONTAINER_STR=$($CURL_CMD/1.0/containers -XGET | jq ".metadata[]" | tr -d '"')
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+
+    # Check one by one which of the containers accomplish the filter
+    local CNAME
+    while read CNAME; do
+        CNAME="${CNAME:16}"
+        if [[ "${CNAME:0:4}" =~ ^${FILTER}$ ]]; then
+            echo "$CNAME"
+        fi
+    done <<< "$CONTAINER_STR"
+    return 0
+}
+
+function _CONTAINER__exists() {
+    # 
+    # $ Usage: _CONTAINER__exists <name>
+    #
+    # Checks whether the container exists or not
+    #
+    local C_NAME=$1
+
+    if [ "$C_NAME" == "" ]; then
+        p_error "container name is blank"
+        return 1
+    fi
+
+    # If we can get the information from the API, the container exists
+    $CURL_CMD/1.0/containers/$C_NAME -XGET > /dev/null 2> /dev/null
+    if (( $? == 0 )); then
+        return 0
+    fi
+
+    return 1
+}
+
+function _CONTAINER__get_networks() {
+    # 
+    # $ Usage: _CONTAINER__get_networks <container>
+    #
+    # Get the list of networks to which the container is attached
+    local C_NAME=$1
+
+    if [ "$C_NAME" == "" ]; then
+        p_error "container name is blank"
+        return 1
+    fi
+
+    # Get the information of the container
+    local C_DATA
+    C_DATA="$($CURL_CMD/1.0/containers/$C_NAME -XGET 2> /dev/null)"
+    if (( $? != 0 )); then
+        p_error "could not get information about container"
+        return 2
+    fi
+
+    # Return the names of the networks
+    echo "$C_DATA" | jq '.metadata.devices[] | select(."type"=="nic") | ."parent"' | tr -d '"'
+    return 0
+}
+
+function _CONTAINER__launch() {
+    #
+    # $ Usage: _CONTAINER__launch <name> <image> <network>
+    #
+    # Starts a container with name <name>, using the <image> and connects it to the <network>
+    local C_NAME=$1
+    local C_IMAGE=$2
+    local C_NETWORK=$3
+
+    p_info "creating host $C_NAME using image $C_IMAGE in network $C_NETWORK"
+
+    _CONTAINER__exists "$C_NAME" && return 1
+    _NETWORK__ensure_exists "$C_NETWORK" "True" || return 2
+    _CONTAINER__ensure_image_exists "$C_IMAGE" || return 3
+
+    execute_command lxc launch -n "$C_NETWORK" -e $C_IMAGE "$C_NAME" > /dev/null
+    if (( $? == 0 )); then
+        p_debug "container $C_NAME successfully launched"
+        # As we are using ephemeral containers, we do not need to delete them
+        _UNDO__add_undo_cmdline lxc stop "$C_NAME"
+        return 0
+    else
+        return 4
+    fi
+}
+
+function _NETWORK__ensure_exists() {
+    #
+    # $ Usage: _NETWORK__ensure_exists <network name> <create if not not exists>
+    #
+    # Checks whether the network exists or not. If it does not exist, it will be automatically created if <create if not exists> is True.
+    local NETWORKNAME="$1"
+    local CREATENETWORK="$2"
+
+    if [ "$NETWORKNAME" == "" ]; then
+        p_error "network name is blank"
+        return 1
+    fi
+
+    # If we can get the information about the network, it exists
+    $CURL_CMD/1.0/networks/$NETWORKNAME -XGET > /dev/null 2> /dev/null
+    if (($?==0)); then
+        p_debug "network $NETWORKNAME exists"
+        return 0
+    else
+
+        # If not, check whether we have to create it or not
+        if [ "$CREATENETWORK" != "True" ]; then
+            p_error "network $NETWORKNAME does not exist"
+            return 2
+        else
+
+            # Create the network
+            p_info "creating network $NETWORKNAME"
+
+            local ERR
+            ERR=$(execute_command lxc network create "$NETWORKNAME" 2>&1)
+            if (($?!=0)); then
+                p_error "failed to create network $NETWORKNAME ($ERR)"
+                return 3
+            fi 
+
+            _UNDO__add_undo_cmdline lxc network delete "$NETWORKNAME"
+            return 0
+        fi
+    fi
+}
+
+function stage_in_folder() {
+    local C_NAME=$(ensure_valid_clustername $1)
+    local L_FOLDER="$2"
+    local R_FOLDER="$3"
+
+    if [ -d "$L_FOLDER" ]; then
+        lxc file push -p $L_FOLDER/* $C_NAME/$R_FOLDER/ > /dev/null
+        if (($? != 0)); then
+            return 2
+        fi
+        return 0
+    fi
+    return 1
+}
+
+function prepare_context() {
+    local C_NAME=$(ensure_valid_clustername $1)
+
+#    lxc file push -r -p $MLC_CONTEXT_LOCAL_FOLDER $C_NAME/$MLC_CONTEXT_REMOTE_FOLDER > /dev/null 2> /dev/null
+#    if (($? != 0)); then
+#        p_error "could not stage in the MLC core folder $MLC_CONTEXT_LOCAL_FOLDER"
+#        return 1
+#    fi
+#
+#    if [ -e "$FOLDER" ]; then
+#        lxc file push -r -p $FOLDER/* $C_NAME/etc/context.d/ > /dev/null 2> /dev/null
+#        if (($? != 0)); then
+#            p_error "could not stage in folder $FOLDER"
+#            return 2
+#        fi
+#    fi
+
+    if ! stage_in_folder "$C_NAME" "$MLC_LOCAL_FOLDER" "$MLC_REMOTE_FOLDER"; then
+        p_error "failed to stage in folder $MLC_LOCAL_FOLDER"
+        return 1
+    fi
+
+    return 0
+}
+
+function execute_context() {
+    local C_NAME=$(ensure_valid_clustername $1)
+
+    execute_in_container "$C_NAME" "$MLC_REMOTE_FOLDER/$MLC_SCRIPT_CONTEXT"
+    return $?
+}
+
+function _CONTAINER__ensure_image_exists() {
+    #
+    # Usage: _CONTAINER__ensure_image_exists <image>
+    #
+    # Checks whether the image exists or not
+    local IMAGENAME=$1
+
+    if [ "$IMAGENAME" == "" ]; then
+        p_error "image name is blank"
+        return 2
+    fi
+
+    execute_command lxc image show $IMAGENAME > /dev/null 2> /dev/null
+    if (($?!=0)); then
+        p_error "image $IMAGENAME does not exist"
+        return 1
+    else
+        p_debug "image $IMAGENAME is available"
+        return 0
+    fi
+}
+
+function _NETWORK__get_node_ip() {
+    # This functions get the ip in a network, for a container (if it is connected)
     local C_NAME=$1
     local N_NAME=$2
 
+    # First we check which device is connected to that network
     local DEVICE
     output_to_var_or_fail DEVICE "could not find a device for network $N_NAME in container $C_NAME" \
         eval "$CURL_CMD/1.0/containers/$C_NAME -XGET | jq  '.metadata.config.\"volatile.$N_NAME.name\"' | tr -d '\"'" || return 1
@@ -17,11 +297,13 @@ function _NETWORK_get_node_ip() {
         return 2
     fi
 
+    # Then we check which is the IP address of that device
     local IP_ADDR
     output_to_var_or_fail IP_ADDR "failed to obtain the IP address for device $DEVICE from container $C_NAME" \
         eval "$CURL_CMD/1.0/containers/$C_NAME/state -XGET | jq '.metadata.network[\"$DEVICE\"].addresses[] | select(.\"family\"==\"inet\") | .address'" ||
             return 3
 
+    # Finally, show the IP address
     echo "$IP_ADDR" | tr -d '"'
     return 0    
 }

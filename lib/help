@@ -1,0 +1,110 @@
+#!/bin/bash
+declare CMD_CMD=()
+declare CMD_DESC=()
+
+function _HELP__usage() {
+    # 
+    # $ Usage: usage <extra information> <long description>
+    #
+    # Simply shows the commandline
+    _HELP__show_cmd_line $1
+    if [ "$2" != "" ]; then
+        echo "$2"
+    fi
+    _HELP__show_help
+}
+
+function _HELP__reset_help() {
+    #
+    # $ Usage: _HELP__reset_help
+    #
+    # Removes all the entries in the help
+    #
+    CMD_CMD=()
+    CMD_DESC=()
+}
+
+function _HELP__add_help_cmd() {
+    #
+    # $ Usage: _HELP__add_help_cmd <command name> <description>
+    #
+    # Adds a help entry
+    #
+    CMD_CMD+=("$1")
+    CMD_DESC+=("$2")
+}
+
+function _HELP__show_help() {
+    #
+    # $ Usage: _HELP__show_help
+    #
+    # This command calculates the maximum length of all the commands and outputs
+    #   the whole help in the format
+    #   CMD1     - DESCRIPTION1
+    #   COMMAND2 - DESCRIPTION2
+    #   Making that the separators are in the same column
+
+    # First we calculate the with of the commands
+    local i max_width w
+    for ((i=0; i<${#CMD_CMD[@]}; i++)); do
+        w=${#CMD_CMD[$i]}
+        max_width=$(( w > max_width ? w : max_width ))
+    done
+
+    # Then output the command using the format function
+    for ((i=0; i<${#CMD_CMD[@]}; i++)); do
+        echo
+        _HELP__fmt_command_out $((max_width+2)) "${CMD_CMD[$i]} -" "${CMD_DESC[$i]}"
+    done
+}
+
+function _HELP__fmt_command_out() {
+    #
+    # $ Usage: _HELP__fmt_command_out <max_width> <command name> <command description>
+    #
+    # This function receives a command and a description, and the max length of the rest of the commands
+    #   and outputs the command and the description in the format
+    #     COMMAND    - DESCRIPTION
+    #   adjusting the output to make that the separator is in the same column. This function also makes 
+    #   that the maximum width of all the descriptions does not exceed the 80 characters
+    local max_width=$1
+    local cmd=$2
+    local desc=$3
+    local padblank=$(printf "%0.1s" " "{0..100})
+    local fmt_str_1="%${max_width}s %s"
+    local fmt_str_2="${padblank:0:$((max_width+1))}%s%s"
+    local fmt_str=$fmt_str_1
+    local cmd_txt=$cmd
+    local LINE
+    while read LINE; do
+        printf "${fmt_str}\n" "$cmd_txt" "$LINE"
+        fmt_str=$fmt_str_2
+        cmd_txt=
+    done <<< "$(echo "$desc" | fold -s -w $((80-$max_width)))"
+}
+
+function _HELP__show_cmd_line() {
+    #
+    # $ Usage: _HELP__show_cmd_line <info>
+    #
+    # This function simply shows the command line that invokes the application, including the known commands
+    #   in the help (does not show the help about the commands, just the commandline)
+
+    # We accept an extra description/information to show following the name of the command
+    local OSTR="Usage: $0"
+    if [ "$1" != "" ]; then
+        OSTR="$OSTR $1"
+    fi
+
+    # Now we concatenate all the possible commands
+    local CMD_STR=
+    for ((i=0; i<${#CMD_CMD[@]}; i++)); do
+        CMD_STR="$CMD_STR ${CMD_CMD[$i]}"
+    done
+
+    # Finally we use the formatting function to respect the width
+    _HELP__fmt_command_out ${#OSTR} "$OSTR" "$CMD_STR"
+}
+
+# Make that the help is empty on start
+_HELP__reset_help

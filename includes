@@ -1,0 +1,11 @@
+#!/bin/bash
+
+[ "$__INCLUDES_INCLUDED__" != "" ] && return
+__INCLUDES_INCLUDED__=True
+
+MLC_FOLDER=${MLC_FOLDER:-$(dirname $0)}
+source "$MLC_FOLDER/config"
+source "$MLC_FOLDER/lib/common"
+source_folder "$MLC_FOLDER/operations"
+source_folder "$MLC_FOLDER/lib"
+source "$MLC_FOLDER/platform/platform"
