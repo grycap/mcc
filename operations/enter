@@ -3,17 +3,17 @@ function enter() {
     local CLUSTERNAME=
     local DELETE=
 
-    reset_help
-    add_help_cmd "--help|-h" "shows this help and exists"
-    add_help_cmd "--delete-on-exit|-D" "deletes the cluster once the session has finished"
-    add_help_cmd "<cluster name>" "name of the cluster in which to enter"
+    _HELP__reset_help
+    _HELP__add_help_cmd "--help|-h" "shows this help and exists"
+    _HELP__add_help_cmd "--delete-on-exit|-D" "deletes the cluster once the session has finished"
+    _HELP__add_help_cmd "<cluster name>" "name of the cluster in which to enter"
     while (( $# > 0 )); do
         case "$1" in
             --help|-h)              usage addnode && exit 0;;
             --delete-on-exit|-D)    DELETE=True;;
 
             *)  if [ "$CLUSTERNAME" == "" ]; then 
-                    CLUSTERNAME=$(ensure_valid_clustername $1)
+                    CLUSTERNAME=$1
                 else
                     usage addnode && exit 1
                 fi;;
@@ -21,11 +21,18 @@ function enter() {
         shift
     done
 
+    if [ "$CLUSTERNAME" == "" ]; then  
+        p_error "you must provide the name of the cluster to enter"
+        return 1
+    fi
+
+    CLUSTERNAME="$(_NAMING__ensure_valid_clustername "$CLUSTERNAME")"
+
     # If the cluster does not exist, fail
-    cluster_exists "$CLUSTERNAME" || return 1
+    _CLUSTER__exists "$CLUSTERNAME" || return 1
 
     # enter in the cluster
-    lxc exec $CLUSTERNAME bash
+    _CONTAINER__execute "$CLUSTERNAME" sh
 
     # if the user has requested to delete the cluster, invoke the function to delete it
     if [ "$DELETE" == "True" ]; then

@@ -69,12 +69,21 @@ function _NAMING__get_nodeid_from_nodename() {
     return 0
 }
 
+function _NAMING__generate_cluster_name() {
+    #
+    # $ Usage: _NAMING__generate_cluster_name
+    #
+    # Returns a random cluster name that follows the naming scheme
+    echo "${CONTAINER_PREFIX}$(cat /proc/sys/kernel/random/uuid | sed 's/.*-\([a-f0-9]*\)$/\1/')"
+}
+
 function _NAMING__ensure_valid_clustername() {
     # This function makes that a cluster name is valid
     local C_NAME="$1"
 
     if [ "$C_NAME" == "" ]; then
-        C_NAME="${CONTAINER_PREFIX}$(cat /proc/sys/kernel/random/uuid | sed 's/.*-\([a-f0-9]*\)$/\1/')"
+        p_error "cluster name is empty"
+        return 1
     fi
 
     # If the name for the cluster is not valid, we will suppose that the user forgot to include the prefix
@@ -83,5 +92,5 @@ function _NAMING__ensure_valid_clustername() {
     else
         echo "${CONTAINER_PREFIX}$C_NAME"
     fi
+    return 0
 }
-

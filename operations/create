@@ -2,7 +2,7 @@
 
 function create() {
     local NODECOUNT=1
-    local FRONTENDIMAGE=ubuntu:
+    local FRONTENDIMAGE=local:alpine:3.4
     local CLUSTERNAME
     local NETWORKNAME
     local ENTERCLUSTER
@@ -43,6 +43,10 @@ function create() {
     ensure_valid_folder "$CONTEXTFOLDER" || return 1
 
     # If a name for the cluster is not provided, we will generate a new one
+    if [ "$CLUSTERNAME" == "" ]; then
+        CLUSTERNAME=$(_NAMING__generate_cluster_name)
+    fi
+    
     CLUSTERNAME="$(_NAMING__ensure_valid_clustername "$CLUSTERNAME")"
     NETWORKNAME="$(_NAMING__get_cluster_network_name "$CLUSTERNAME")"
 
@@ -51,38 +55,16 @@ function create() {
         p_error "cluster $CLUSTERNAME already exists"
         return 2
     fi
-    
-    # Finally we will launch the container
-    if ! _CONTAINER__launch "$CLUSTERNAME" "$FRONTENDIMAGE" "$NETWORKNAME"; then
-        p_error "failed to launch frontend $CLUSTERNAME"
-        return 4
-    fi
 
-    # If the container has been launched, we will wait for its IP address
-    p_debug "waiting for container to have IP address"
-    output_to_var_or_fail IP -- _MLC__wait_ip_address "$CLUSTERNAME" || return 4
+    # Launch the container that represents the frontend    
+    _MLC__launch_container "$CLUSTERNAME" "$FRONTENDIMAGE" "$CONTEXTFOLDER"
 
-    p_debug "cluster $CLUSTERNAME has IP address $IP"
-
-    # And now we will contextualize the container
-    prepare_context "$CLUSTERNAME"
-    if [ "$CONTEXTFOLDER" != "" ]; then
-        p_debug "contextualization of $CLUSTERNAME"
-        stage_in_folder "$CLUSTERNAME" "$CONTEXTFOLDER" "$MLC_CONTEXT_SCRIPTS_REMOTE_FOLDER"
-    fi
-
-    # And contextualize it
-    if execute_context "$CLUSTERNAME"; then
-        p_debug "contextualization of $CLUSTERNAME suceeded"
-    else
-        p_error "failed to contextualize $CLUSTERNAME"
-    fi
-
+    # We have managed to launch the cluster!
     p_out "$CLUSTERNAME successfully created"
 
     # An extra function is to automatically enter into the cluster
     if [ "$ENTERCLUSTER" == "True" ]; then
-        lxc exec $CLUSTERNAME bash
+        _CONTAINER__execute $CLUSTERNAME sh
     fi
 
     # if the user has requested to delete the cluster, invoke the function to delete it

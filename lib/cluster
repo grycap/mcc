@@ -1,6 +1,10 @@
 #!/bin/bash
-
 function _CLUSTER__exists() {
+    #
+    # $ Usage: _CLUSTER__exists <clustername>
+    #
+    # Returns whether the cluster exists in the system or not
+
     local CLUSTERNAME=$1
 
     # Get the list of clusters
@@ -21,6 +25,11 @@ function _CLUSTER__exists() {
 }
 
 function _CLUSTER__get_list() {
+    #
+    # $ Usage: _CLUSTER__get_list
+    #
+    # Gets the list of clusters
+
     local CONTAINER_STR
     output_to_var_or_fail CONTAINER_STR "could not get the list of containers" _MLC__get_container_list ||
         return 1
@@ -37,6 +46,11 @@ function _CLUSTER__get_list() {
 }
 
 function _CLUSTER__get_nodes() {
+    #
+    # $ Usage: _CLUSTER__get_nodes <clustername>
+    #
+    # Returns the nodes that belong to a cluster (according to the naming scheme)
+
     local CLUSTERNAME="$1"
 
     # Get the list of containers
@@ -55,6 +69,11 @@ function _CLUSTER__get_nodes() {
 }
 
 function _CLUSTER__get_info() {
+    #
+    # $ Usage: _CLUSTER__get_info <clustername>
+    #
+    # Returns the information about one cluster
+
     local CLUSTERNAME="$1"
 
     local NODES=
@@ -66,7 +85,8 @@ function _CLUSTER__get_info() {
         return 2
 
     local IPS
-    output_to_var_or_fail IPS "could obtain the ip addresses associated to $CLUSTERNAME" _NETWORK__get_node_ip "$CLUSTERNAME" || 
+    local C_NETWORK=$(_NAMING__get_cluster_network_name $CLUSTERNAME)
+    output_to_var_or_fail IPS "could obtain the ip addresses associated to $CLUSTERNAME" _NETWORK__get_node_ip "$CLUSTERNAME" "$C_NETWORK" || 
         return 3
     
     echo "$CLUSTERNAME;$NETWORKS;$IPS;$NODES"

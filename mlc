@@ -62,7 +62,7 @@ while [ $n -lt ${#ARR[@]} -a "$COMMAND" == "" ]; do
     PARAM="${ARR[$n]}"
     case "$PARAM" in
         delnode|enter|list|addnode|create|delete) COMMAND="$PARAM";;
-        --help | -h) usage "" && exit 0;;
+        --help | -h) _HELP__usage "" && exit 0;;
         *) usage && exit 1;;
     esac
     n=$(($n+1))
@@ -76,8 +76,8 @@ if [ "$COMMAND" != "" ]; then
     $COMMAND "${ARR[@]:$n}"
     if [ $? -ne 0 ]; then
         echo "trying to undo the commands executed"
-        execute_undo_cmds
+        # _UNDO__execute
     fi
 else
-    echo "no command issued" && usage "" && exit 1
+    echo "no command issued" && _HELP__usage "" && exit 1
 fi

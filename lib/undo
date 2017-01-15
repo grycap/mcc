@@ -25,6 +25,6 @@ function _UNDO__execute() {
     # Executes the list of commands that revert a situation, in the same order that they were issued
     local LINE
     while read LINE; do
-        execute_command 5 5 "$LINE"
+        execute_command "$LINE"
     done <<< "$(echo "${UNDO_CMDS}" | tac - | tail -n +2)"
 }

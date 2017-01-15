@@ -1,5 +1,23 @@
 #!/bin/bash
 
+function var_empty() {
+    #
+    # $ Usage: var_empty <varname> <message>
+    #
+    # If varname is empty (i.e. equal to ""), display the message and return true
+    local varname=$1
+    local value
+    eval value=\$$varname
+    local message="$2"
+
+    if [ "$value" == "" ]; then
+        p_error "$2"
+        return 0
+    else
+        return 1
+    fi
+}
+
 function element_in_list() {
     #
     # $ Usage: element_in_list <element> <space separated list>
@@ -8,7 +26,7 @@ function element_in_list() {
     # * this is useful to search elements like "a" in a list "c d aa a f b", 
     #   but also works for elements such as "d aa"
     local ELEMENT="$1"
-    local LIST="$2"
+    local LIST="$(echo "$2" | tr '\n' ' ')"
 
     if [[ "$LIST" =~ (^|[[:blank:]]+)$ELEMENT([[:blank:]]+|$) ]]; then
         return 0
@@ -239,4 +257,13 @@ function ensure_valid_folder() {
         return 1
     fi
     return 0
+}
+
+function evaluate() {
+    $@ > /dev/null 2> /dev/null
+    if (($?==0)); then
+        echo "True"
+    else
+        echo "False"
+    fi
 }

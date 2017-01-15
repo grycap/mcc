@@ -5,6 +5,20 @@
 # MLC_FOLDER=/home/calfonso/Programacion/git/my_lxd_cluster/
 # source ../includes
 
+function _MLC__get_node_ip() {
+    # $ Usage: _MLC__get_node_ip
+    # 
+    # Returns the IP of the node in the network of the cluster
+    local C_NAME=$1
+    local C_NETWORK=$(_NAMING__get_cluster_network_name "$C_NAME")
+
+    local C_IP
+    output_to_var_or_fail C_IP "" _NETWORK__get_node_ip "$C_NAME" "$C_NETWORK" || return 1
+
+    echo "$C_IP"
+    return 0
+}
+
 function _MLC__get_container_list() {
     # $ Usage: _MLC__get_container_list
     # 
@@ -34,10 +48,14 @@ function _MLC__wait_ip_address() {
 
 function _MLC__launch_container() {
     #
-    # $ Usage: _MLC__launch_container <container> <image> <context folder> -- <local folder> <remote folder> ...
+    # $ Usage: _MLC__launch_container <container> <image> <context folder> <local folder> <remote folder> ...
     #
     local C_NAME=$1
     local IMAGENAME=$2
+    local CONTEXTFOLDER=$3
+    shift
+    shift
+    shift
 
     local NETWORKNAME
     NETWORKNAME="$(_NAMING__get_cluster_network_name "$C_NAME")"
@@ -54,10 +72,40 @@ function _MLC__launch_container() {
 
     p_debug "container $C_NAME has IP address $IP"
 
-    # Now, the contextualization
-    # * it has to upload the *context folder" to /etc/mlc.d
-    # * then it uploads the other folders (if they are provided)
-    # * finally, call the context-node script
+    # For contextualization, we first upload the contextualization files
+    exec_or_fail "failed to upload contextualization files " _CONTAINER__upload_folder_content "$C_NAME" "${MLC_LOCAL_FOLDER}" "$MLC_REMOTE_FOLDER" || 
+        return 3
+
+    # The upload the contextualization scripts folder (if provided)
+    if [ "$CONTEXTFOLDER" != "" ]; then
+        p_debug "uploading the files in folder $CONTEXTFOLDER to folder $MLC_CONTEXT_SCRIPTS_REMOTE_FOLDER"
+        exec_or_fail "failed to upload folder $CONTEXTFOLDER" _CONTAINER__upload_folder_content "$C_NAME" "${CONTEXTFOLDER}" "$MLC_CONTEXT_SCRIPTS_REMOTE_FOLDER" ||
+            return 4
+    fi
+
+    # Finally, the arbitrary folders
+    local L_FOLDER
+    local R_FOLDER
+    while (($#>0)); do
+        L_FOLDER="$1"
+        R_FOLDER="$2"
+        if [ "$L_FOLDER" != "" -a "$R_FOLDER" != "" ]; then
+            p_debug "uploading $L_FOLDER to $R_FOLDER in container $C_NAME"
+            if ! _CONTAINER__upload_folder_content "$C_NAME" "$L_FOLDER" "$R_FOLDER"; then
+                p_error "failed to upload folder $L_FOLDER"
+            fi
+        fi
+        shift
+        shift
+    done
+
+    # And we are ready to launch the contextualization script
+    p_debug "executing the contextualization script ${MLC_REMOTE_FOLDER}/$MLC_SCRIPT_CONTEXT in $C_NAME"
+    if ! _CONTAINER__execute "$C_NAME" "${MLC_REMOTE_FOLDER}/$MLC_SCRIPT_CONTEXT"; then
+        p_error "contextualization returned an error"
+        return 5
+    fi
+
     return 0
 }
 
@@ -145,6 +193,26 @@ function _CONTAINER__get_networks() {
     return 0
 }
 
+function _CONTAINER__stop() {
+    local C_NAME=$1
+
+    if ! _CONTAINER__exists "$C_NAME"; then
+        p_error "container $C_NAME does not exist"
+        return 1
+    fi
+
+    local ERR
+    local RESULT
+    RESULT=$(execute_command lxc stop "$C_NAME" 2>&1)
+    ERR=$?
+    if (( ERR == 0 )); then
+        p_debug "container successfully stopped"
+    else
+        p_error "failed to stop container ($RESULT)"
+    fi
+    return $ERR
+}
+
 function _CONTAINER__launch() {
     #
     # $ Usage: _CONTAINER__launch <name> <image> <network>
@@ -168,6 +236,82 @@ function _CONTAINER__launch() {
         return 0
     else
         return 4
+    fi
+}
+
+function _NETWORK__exists() {
+    local NETWORKNAME="$1"
+    
+    var_empty NETWORKNAME "network name is blank" && return 1
+
+    # If we can get the information about the network, it exists
+    $CURL_CMD/1.0/networks/$NETWORKNAME -XGET > /dev/null 2> /dev/null
+    if (($?==0)); then
+        p_debug "network $NETWORKNAME exists"
+        return 0
+    else
+        return 1
+    fi
+}
+
+function _NETWORK__create() {
+    local NETWORKNAME="$1"
+    
+    var_empty NETWORKNAME "network name is blank" && return 1
+    if _NETWORK__exists "$NETWORKNAME"; then
+        p_debug "network $NETWORKNAME already exists"
+        return 0
+    fi
+
+    # Create the network
+    p_info "creating network $NETWORKNAME"
+
+    local ERR
+    ERR=$(execute_command lxc network create "$NETWORKNAME" 2>&1)
+    if (($?!=0)); then
+        p_error "failed to create network $NETWORKNAME ($ERR)"
+        return 1
+    fi 
+
+    _UNDO__add_undo_cmdline lxc network delete "$NETWORKNAME"
+    return 0
+}
+
+function _NETWORK__delete() {
+    local NETWORKNAME="$1"
+    
+    var_empty NETWORKNAME "network name is blank" && return 1
+
+    if ! _NETWORK__exists "$NETWORKNAME"; then
+        p_debug "network $NETWORKNAME does not exists"
+        return 0
+    fi
+
+    # Create the network
+    p_info "creating network $NETWORKNAME"
+
+    local ERR
+    ERR=$(execute_command lxc network delete "$NETWORKNAME" 2>&1)
+    if (($?!=0)); then
+        p_error "failed to delete network $NETWORKNAME ($ERR)"
+        return 1
+    fi 
+
+    return 0
+}
+
+function _NETWORK_get_tenants() {
+    local NETWORKNAME="$1"
+    
+    var_empty NETWORKNAME "network name is blank" && return 1
+
+    local COUNT
+    COUNT=$($CURL_CMD/1.0/networks/$NETWORKNAME -XGET | jq '.metadata.used_by | length' 2> /dev/null)
+    if (($? == 0)); then
+        echo "$COUNT"
+        return 0
+    else
+        return 1
     fi
 }
 
@@ -213,13 +357,20 @@ function _NETWORK__ensure_exists() {
     fi
 }
 
-function stage_in_folder() {
-    local C_NAME=$(ensure_valid_clustername $1)
+function _CONTAINER__upload_folder_content() {
+    #
+    # $ Usage: _CONTAINER__upload_folder_content <container name> <local folder> <folder in container>
+    #
+    # Uploads the content of a folder to the <folder in container>
+    # * the folder (along with the intermediate folders) in the container is created if it did not existed before
+    local C_NAME="$1"
     local L_FOLDER="$2"
     local R_FOLDER="$3"
 
     if [ -d "$L_FOLDER" ]; then
-        lxc file push -p $L_FOLDER/* $C_NAME/$R_FOLDER/ > /dev/null
+        # Have to create the folder before because even using -p if the first folder of a path does not exist, lxc file push will fail
+        lxc exec "$C_NAME" -- mkdir -p "$R_FOLDER" > /dev/null
+        lxc file push -p "$L_FOLDER/"* "$C_NAME/$R_FOLDER/" > /dev/null
         if (($? != 0)); then
             return 2
         fi
@@ -227,6 +378,29 @@ function stage_in_folder() {
     fi
     return 1
 }
+
+function _CONTAINER__upload_file() {
+    #
+    # $ Usage: _CONTAINER__upload_file <container name> <local file> <folder in container>
+    #
+    # Uploads the file to the <folder in container>
+    # * the folder (along with the intermediate folders) in the container is created if it did not existed before
+    local C_NAME="$1"
+    local L_FILE="$2"
+    local R_FOLDER="$3"
+
+    if [ -f "$L_FILE" ]; then
+        # Have to create the folder before because even using -p if the first folder of a path does not exist, lxc file push will fail
+        lxc exec "$C_NAME" -- mkdir -p "$R_FOLDER" > /dev/null
+        lxc file push -p "$L_FILE" "$C_NAME/$R_FOLDER/" > /dev/null
+        if (($? != 0)); then
+            return 2
+        fi
+        return 0
+    fi
+    return 1
+}
+
 
 function prepare_context() {
     local C_NAME=$(ensure_valid_clustername $1)

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 CONTAINERNAME="$1"
 IPADDR="$2"
 shift
