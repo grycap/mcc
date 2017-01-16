@@ -1,0 +1,41 @@
+#!/bin/bash
+
+function list() {
+    _HELP__reset_help
+    _HELP__add_help_cmd "--help|-h" "shows this help and exists"
+    _HELP__add_help_cmd "--silent|-s" "does not print the header"
+    _HELP__add_help_cmd "--show-nodes|-S" "shows all the nodes"
+
+    local SHOWNODES SILENT
+    while (( $# > 0 )); do
+        case "$1" in
+            --silent|-s)            SILENT=True;;
+            --show-nodes|-S)        SHOWNODES=True;;
+            --help | -h)            _HELP__usage list && exit 0;;
+            *)                      _HELP__usage list && exit 1;;
+        esac
+        shift
+    done
+
+    local CLUSTERNAME
+    local C_INFO
+
+    if [ "$SHOWNODES" == "True" ]; then 
+        # If we wanted to show the nodes, simply show the list of containers in the system
+        _MLC__get_container_list
+        return $?
+    else
+        # Otherwise, get the information about the clusters and show them
+        { 
+            [ "$SILENT" != "True" ] && echo "Name;Networks;IPs;Nodes"
+            for CLUSTERNAME in $(_CLUSTER__get_list); do
+                C_INFO=$(_CLUSTER__get_info $CLUSTERNAME)
+                if (($? == 0)); then
+                    echo "$C_INFO" | tr '\n' ' '
+                    echo
+                fi
+            done 
+        } | column -t -s ';'
+    fi
+    return 0
+}

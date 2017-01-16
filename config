@@ -1,0 +1,10 @@
+CURL_CMD="curl -sf --unix-socket /var/lib/lxd/unix.socket http:"
+MLC_REMOTE_FOLDER="/opt/context/mlc"
+MLC_LOCAL_FOLDER="$(dirname $0)/context/mlc"
+MLC_FRONTEND_CONTEXT="$(dirname $0)/context/front-end"
+MLC_SCRIPT_CONTEXT="context-node"
+MLC_SCRIPT_ADDNODE="add-node"
+MLC_SCRIPT_DELNODE="remove-node"
+MLC_CONTEXT_SCRIPTS_REMOTE_FOLDER="/etc/mlc.d"
+MAXNODES=100
+MLC_SHELLS="bash sh"

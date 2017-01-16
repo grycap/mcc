@@ -1,0 +1,117 @@
+#!/bin/bash
+function delete_cluster() {
+    local CLUSTERNAME=$1
+    local FORCE=$2
+    local DELETENETWORK=$3
+
+    if ! _CLUSTER__exists "$CLUSTERNAME"; then
+        p_error "could not find the cluster $CLUSTERNAME"
+        return 1
+    fi
+    
+    local FAILED=False
+    if ! delnode "$CLUSTERNAME" --all; then
+        p_error "some errors ocurred when deleting the nodes from cluster $CLUSTERNAME"
+        FAILED=True
+    fi
+
+    if [ "$FORCE" != "True" ]; then
+        if [ "$FAILED" == "True" ]; then
+            p_error "failed to stop some nodes from cluster $CLUSTERNAME"
+            return 2
+        fi
+    fi
+
+    p_debug "getting information about the networks used for the container"
+    local NETWORKS
+    if [ "$DELETENETWORK" == "True" ]; then
+        NETWORKS=$(_CONTAINER__get_networks $CLUSTERNAME)
+        if (($? != 0)); then
+            p_error "could not obtain the networks associated to $CLUSTERNAME"
+            return 4
+        fi
+    fi
+
+    p_info "stopping the container $CLUSTERNAME"
+    if ! _CONTAINER__stop "$CLUSTERNAME"; then
+        p_error "could not stop node $CLUSTERNAME"
+        return 3
+    fi
+
+    if [ "$DELETENETWORK" == "True" ]; then
+        local NETWORKNAME
+        local COUNT
+        while read NETWORKNAME; do
+            if output_to_var_or_fail COUNT "could not get information about network $NETWORKNAME" _NETWORK_get_tenants "$NETWORKNAME"; then
+                if ((COUNT==0)); then
+                    if _NETWORK__delete "$NETWORKNAME"; then
+                        p_debug "network $NETWORKNAME successfully deleted"
+                    else
+                        p_error "could not delete network $NETWORKNAME"
+                    fi
+                else
+                    p_debug "network $NETWORKNAME still has some containers in it"
+                fi
+            fi
+        done <<< "$NETWORKS"
+    fi    
+
+    p_out "cluster $CLUSTERNAME successfully deleted"
+    return 0
+}
+
+function delete() {
+    local CLUSTERNAME=
+    local DELETENETWORK=True
+    local FORCE=False
+    local ALL=False
+
+    _HELP__reset_help
+    _HELP__add_help_cmd "<name>" "name of the cluster"
+    _HELP__add_help_cmd "--no-delete-network|-n" "no deletes the network in the case that there are not any container using it (default: deletes the network)"
+    _HELP__add_help_cmd "--force|-f" "deletes the front-end even if any of the working nodes could not be deleted (default: fail if a node could not be stopped)"
+    _HELP__add_help_cmd "--help|-h" "shows this help and exists"
+    _HELP__add_help_cmd "--all|-A" "deletes all the clusters"
+
+    while (( $# > 0 )); do
+        case "$1" in
+            --no-delete-network|-n)        DELETENETWORK=False;;
+            --force|-f)                 FORCE=True;;
+            --help|-h)                  _HELP__usage delete && exit 0;;
+            --all|-A)                   ALL=True;;
+            *)  if [ "$CLUSTERNAME" == "" ]; then 
+                    CLUSTERNAME="$1"
+                else
+                    _HELP__usage addnode && exit 1
+                fi;;
+        esac
+        shift
+    done
+
+    if [ "$ALL" == "True" ]; then
+        local ERROR=0
+        for CLUSTERNAME in $(_CLUSTER__get_list); do
+            p_info "deleting cluster $CLUSTERNAME"
+            delete_cluster "$CLUSTERNAME" "$FORCE" "$DELETENETWORK"
+            if (($? != 0)); then
+                ((ERROR++))
+            fi
+        done 
+        if ((ERROR>0)); then
+            p_error "some clusters could not be deleted"
+            return -1
+        else
+            return 0
+        fi
+    else
+        if [ "$CLUSTERNAME" == "" ]; then
+            p_error "missing name of the cluster to delete"
+            return 1
+        fi
+
+        CLUSTERNAME="$(_NAMING__ensure_valid_clustername "$CLUSTERNAME")"
+        delete_cluster "$CLUSTERNAME" "$FORCE" "$DELETENETWORK"
+        return $?
+    fi
+}
+

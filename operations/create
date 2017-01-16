@@ -1,0 +1,99 @@
+#!/bin/bash
+
+function create() {
+    local NODECOUNT=0
+    local FRONTENDIMAGE=local:alpine
+    local WNIMAGE=local:alpine
+    local CLUSTERNAME
+    local NETWORKNAME
+    local ENTERCLUSTER
+    local CONTEXTFOLDER
+    local DELETE
+
+    _HELP__reset_help
+    _HELP__add_help_cmd "<name>" "name of the cluster (default: auto generated name). The name of the cluster MUST follow the format mlc-<name>. If it is not respected, mlc- will be prepended"
+    _HELP__add_help_cmd "--front-end-image|-f <image>" "name of the image to be used for the front-end (default: ubuntu:latest)"
+    _HELP__add_help_cmd "--help|-h" "shows this help and exists"
+    _HELP__add_help_cmd "--enter-cluster|-e" "enters in the cluster, in an interactive session, if it is successfully created"
+    _HELP__add_help_cmd "--context-folder|-c" "folder that contains the scripts to be executed on contextualization"
+    _HELP__add_help_cmd "--delete-on-exit|-D" "deletes the cluster when exiting the interactive session (implies -e)"
+
+    while (( $# > 0 )); do
+        case "$1" in
+            --front-end-image|-f)   FRONTENDIMAGE=$2
+                                    shift;;
+
+            --nodes|-n)             NODECOUNT=$2
+                                    shift;;
+
+            --working-node-image|-w)   WNIMAGE=$2
+                                    shift;;
+
+            --enter-cluster|-e)     ENTERCLUSTER=True;;
+
+            --context-folder|-c)        CONTEXTFOLDER=$2
+                                        shift;;
+            --delete-on-exit|-D)    ENTERCLUSTER=True    
+                                    DELETE=True;;
+
+            --help|-h)          _HELP__usage create && exit 0;;
+            *)  if [ "$CLUSTERNAME" == "" ]; then 
+                    CLUSTERNAME="$1"
+                else
+                    _HELP__usage addnode && exit 1
+                fi;;
+        esac
+        shift
+    done
+
+    # First we will check if the folder provided for contextualization is valid
+    ensure_valid_folder "$CONTEXTFOLDER" || return 1
+
+    # If a name for the cluster is not provided, we will generate a new one
+    if [ "$CLUSTERNAME" == "" ]; then
+        CLUSTERNAME=$(_NAMING__generate_cluster_name)
+    fi
+    
+    CLUSTERNAME="$(_NAMING__ensure_valid_clustername "$CLUSTERNAME")"
+    NETWORKNAME="$(_NAMING__get_cluster_network_name "$CLUSTERNAME")"
+
+    # If the cluster exists, fail
+    if _CLUSTER__exists "$CLUSTERNAME"; then
+        p_error "cluster $CLUSTERNAME already exists"
+        return 2
+    fi
+
+    # Launch the container that represents the frontend    
+    _MLC__launch_container "$CLUSTERNAME" "$FRONTENDIMAGE" "$MLC_FRONTEND_CONTEXT" "$CONTEXTFOLDER" || return 3
+
+    # We have managed to launch the cluster!
+    p_out "$CLUSTERNAME successfully created"
+
+    # Try to automatically launch the working nodes
+    if ((NODECOUNT>0)); then
+        p_info "trying to deploy $NODECOUNT nodes using image $WNIMAGE"
+        if ! addnode "$CLUSTERNAME" -n $NODECOUNT -w "$WNIMAGE" -c "$CONTEXTFOLDER"; then
+            p_error "failed to add the nodes"
+            return 7
+        fi
+    fi
+
+    # An extra function is to automatically enter into the cluster
+    if [ "$ENTERCLUSTER" == "True" ]; then
+        if ! enter "$CLUSTERNAME"; then
+            p_error "could not enter the cluster"
+            return 4
+        fi
+    fi
+
+    # if the user has requested to delete the cluster, invoke the function to delete it
+    if [ "$DELETE" == "True" ]; then
+        if ! delete "$CLUSTERNAME"; then
+            p_error "failed to delete the cluster $CLUSTERNAME" 
+            return 5
+        fi
+        p_debug "cluster $CLUSTERNAME successfully deleted"
+    fi
+
+    return 0
+}

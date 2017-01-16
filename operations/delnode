@@ -1,0 +1,95 @@
+#!/bin/bash
+function delnode() {
+    local CLUSTERNAME=
+    local NODES=
+    local ALL=False
+
+    _HELP__reset_help
+    _HELP__add_help_cmd "<cluster name>" "name of the cluster to which the node is going to be added to"
+    _HELP__add_help_cmd "<node1>..<nodeN>" "name of the nodes to delete"
+    _HELP__add_help_cmd "--all|-a" "delete all the nodes of the cluster (except the front-end)"
+    while (( $# > 0 )); do
+        case "$1" in
+            --all|-a)        ALL=True;;
+            --help|-h)       _HELP__usage delnode && exit 0;;
+
+            *)  if [ "$CLUSTERNAME" == "" ]; then 
+                    CLUSTERNAME="$1"
+                else
+                    NODES="${NODES}$1 "
+                fi;;
+        esac
+        shift
+    done
+
+    # Ensure that we have a valid name for the cluster
+    CLUSTERNAME="$(_NAMING__ensure_valid_clustername "$CLUSTERNAME")" || return 1
+
+    # If the cluster does not exist, fail
+    if ! _CLUSTER__exists "$CLUSTERNAME"; then
+        p_error "cluster $CLUSTERNAME does not exist"
+        return 2
+    fi
+
+    if [ "$NODES" == "" -a "$ALL" != "True" ]; then
+        p_error "no nodes to delete"
+        return 3
+    fi
+
+    local ALLNODES=
+    output_to_var_or_fail ALLNODES "could not get the list of nodes from the cluster $CLUSTERNAME" _CLUSTER__get_nodes "$CLUSTERNAME" || 
+        return 3
+
+    # The simple mechanism is to consider the same list
+    if [ "$ALL" == "True" ]; then
+        NODES="$ALLNODES"
+    fi
+
+    local NODENAME
+    local VALID_NODE
+
+    # Before deleting the nodes, check if all of them are valid (we will not do anything in other case)
+    for NODENAME in $NODES; do
+        if ! element_in_list "$NODENAME" "$ALLNODES"; then
+            p_error "node $NODENAME is not part of cluster $CLUSTERNAME"
+            return 1
+        fi
+    done
+
+    local FAILED=0
+    local FAILED_REMOVE=0
+    for NODENAME in $NODES; do
+        if [ "$NODENAME" != "" ]; then
+            # Will stop the container and remove it from the cluster
+            p_info "stopping the container $NODENAME"
+
+            _CONTAINER__stop "$NODENAME"
+            if (($? != 0)); then
+                FAILED=$((FAILED+1))
+            else
+                # Finally we MUST remove the node from the front-end    
+                NODEID="$(_NAMING__get_nodeid_from_nodename $NODENAME)"
+
+                p_debug "removing node $NODENAME from the cluster $CLUSTERNAME"
+                if ! _CONTAINER__execute "$CLUSTERNAME" "$MLC_REMOTE_FOLDER/$MLC_SCRIPT_DELNODE" "$NODENAME" "255.255.255.255" "${NODEID}" "${NODENAME}" "${NODEID}.${CLUSTERNAME}"; then
+                    p_error "failed to remove the node to the cluster"
+                    ((FAILED_REMOVE++))
+                fi
+                
+                p_out "node $NODENAME removed from cluster $CLUSTERNAME"
+            fi
+        fi
+    done
+
+    # Show errors if they have happened
+    if ((FAILED_REMOVE>0)); then
+        p_error "some nodes failed to be removed from the cluster"
+    fi
+
+    if ((FAILED>0)); then
+        p_error "some nodes failed to stop"
+        return 1
+    fi
+    
+    return 0
+}

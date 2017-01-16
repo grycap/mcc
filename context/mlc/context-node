@@ -1,0 +1,18 @@
+#!/bin/sh
+
+BASEDIR=/etc/mlc.d
+{
+if [ -d $BASEDIR ]; then
+    for scriptname in $BASEDIR/*; do
+        if [ ! -d "$scriptname" -a -x "$scriptname" ]; then
+            # stdbuf -oL -eL $scriptname > /var/log/mlc.log 2>/var/log/mlc.log
+            $scriptname > /var/log/mlc.log 2>/var/log/mlc.log
+            if [ $? -eq 0 ]; then
+                echo -e "Execution of $scriptname [\e[32msucceeded\e[0m]"
+            else
+                echo -e "Execution of $scriptname [\e[31mfailed\e[0m]"
+            fi
+        fi
+    done
+fi
+} 

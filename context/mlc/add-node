@@ -1,0 +1,18 @@
+#!/bin/sh
+CONTAINERNAME="$1"
+IPADDR="$2"
+shift
+shift
+NODENAMES="$@"
+
+# First of all, we remove all the entries in /etc/hosts that contain the IP address
+sed -i "/^[[:blank:]]*${IPADDR}[[:blank:]]\+/d" /etc/hosts
+
+# Now we remove the entries that has any of the node names
+for NODENAME in $NODENAMES; do
+    sed -i "/[[:blank:]]\+${NODENAME}\([[:blank:]]\+\|$\)/d" /etc/hosts
+done
+
+echo "" >> /etc/hosts
+echo "${IPADDR} ${NODENAMES}" >> /etc/hosts
+exit 0
