@@ -1,0 +1,11 @@
+#!/bin/sh
+rm -f /root/.ssh/id_rsa
+ssh-keygen -t rsa -N "" -f /root/.ssh/id_rsa
+
+cat > /root/.ssh/config << EOT
+Host `hostname`* node*
+StrictHostKeyChecking no
+LogLevel quiet
+UserKnownHostsFile /dev/null
+EOT
+exit 0

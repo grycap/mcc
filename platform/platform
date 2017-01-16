@@ -1,7 +1,4 @@
 #!/bin/bash
-# [ "$PLATFORM_INCLUDED" != "" ] && return
-# PLATFORM_INCLUDED=1
-#
 # MLC_FOLDER=/home/calfonso/Programacion/git/my_lxd_cluster/
 # source ../includes
 
@@ -30,14 +27,13 @@ function _MLC__wait_ip_address() {
     #
     # $ Usage: _MLC__wait_ip_address <container>
     #
-    # Waits for the container to have an IP address in the network of the cluster. It retries 5 times
-    #
+    # Waits for the container to have an IP address in the network of the cluster. It retries 10 times
     local C_NAME=$1
     local C_NETWORK=$(_NAMING__get_cluster_network_name $C_NAME)
     local C_IP
 
     # * cannot use output_to_var_or_fail because of the blank parameters
-    C_IP=$(_NEW__retry_while 10 1 "" _NETWORK__get_node_ip "$C_NAME" "$C_NETWORK")
+    C_IP=$(retry_while 10 1 "" _NETWORK__get_node_ip "$C_NAME" "$C_NETWORK")
     if (($?!=0)); then
         p_error "could not get IP address for container $C_NAME"
         return 1
@@ -48,14 +44,14 @@ function _MLC__wait_ip_address() {
 
 function _MLC__launch_container() {
     #
-    # $ Usage: _MLC__launch_container <container> <image> <context folder> <local folder> <remote folder> ...
+    # $ Usage: _MLC__launch_container <container> <image> <context folder> <context folder> ... -- <local folder> <remote folder> ...
     #
     local C_NAME=$1
     local IMAGENAME=$2
-    local CONTEXTFOLDER=$3
+    # local CONTEXTFOLDER=$3
     shift
     shift
-    shift
+    # shift
 
     local NETWORKNAME
     NETWORKNAME="$(_NAMING__get_cluster_network_name "$C_NAME")"
@@ -76,12 +72,18 @@ function _MLC__launch_container() {
     exec_or_fail "failed to upload contextualization files " _CONTAINER__upload_folder_content "$C_NAME" "${MLC_LOCAL_FOLDER}" "$MLC_REMOTE_FOLDER" || 
         return 3
 
-    # The upload the contextualization scripts folder (if provided)
-    if [ "$CONTEXTFOLDER" != "" ]; then
-        p_debug "uploading the files in folder $CONTEXTFOLDER to folder $MLC_CONTEXT_SCRIPTS_REMOTE_FOLDER"
-        exec_or_fail "failed to upload folder $CONTEXTFOLDER" _CONTAINER__upload_folder_content "$C_NAME" "${CONTEXTFOLDER}" "$MLC_CONTEXT_SCRIPTS_REMOTE_FOLDER" ||
-            return 4
-    fi
+    local CONTEXTFOLDER
+    while [ $# -gt 0 -a "$1" != "--" ]; do
+        CONTEXTFOLDER="$1"
+        # The upload the contextualization scripts folder (if provided)
+        if [ "$CONTEXTFOLDER" != "" ]; then
+            p_debug "uploading the files in folder $CONTEXTFOLDER to folder $MLC_CONTEXT_SCRIPTS_REMOTE_FOLDER"
+            exec_or_fail "failed to upload folder $CONTEXTFOLDER" _CONTAINER__upload_folder_content "$C_NAME" "${CONTEXTFOLDER}" "$MLC_CONTEXT_SCRIPTS_REMOTE_FOLDER" ||
+                return 4
+        fi
+        shift
+    done
+    shift
 
     # Finally, the arbitrary folders
     local L_FOLDER
@@ -116,7 +118,7 @@ function _CONTAINER__execute() {
     local C_NAME=$1
     shift
 
-    lxc exec $C_NAME $@
+    lxc exec $C_NAME -- "$@"
     return $?
 }
 
@@ -194,6 +196,10 @@ function _CONTAINER__get_networks() {
 }
 
 function _CONTAINER__stop() {
+    #
+    # $ Usage: _CONTAINER__stop <name>
+    #
+    # Stops a container
     local C_NAME=$1
 
     if ! _CONTAINER__exists "$C_NAME"; then
@@ -240,6 +246,10 @@ function _CONTAINER__launch() {
 }
 
 function _NETWORK__exists() {
+    #
+    # $ Usage: _NETWORK__exists <network name>
+    #
+    # Checks whether a network exists or not
     local NETWORKNAME="$1"
     
     var_empty NETWORKNAME "network name is blank" && return 1
@@ -255,6 +265,10 @@ function _NETWORK__exists() {
 }
 
 function _NETWORK__create() {
+    #
+    # $ Usage: _NETWORK__create <network name>
+    #
+    # Creates a network
     local NETWORKNAME="$1"
     
     var_empty NETWORKNAME "network name is blank" && return 1
@@ -278,6 +292,10 @@ function _NETWORK__create() {
 }
 
 function _NETWORK__delete() {
+    #
+    # $ Usage: _NETWORK__delete <network name>
+    #
+    # Deletes the network
     local NETWORKNAME="$1"
     
     var_empty NETWORKNAME "network name is blank" && return 1
@@ -301,6 +319,10 @@ function _NETWORK__delete() {
 }
 
 function _NETWORK_get_tenants() {
+    #
+    # $ Usage: _NETWORK_get_tenants <network name>
+    #
+    # Gets the number of tenants that are connected to a network
     local NETWORKNAME="$1"
     
     var_empty NETWORKNAME "network name is blank" && return 1
@@ -399,39 +421,6 @@ function _CONTAINER__upload_file() {
         return 0
     fi
     return 1
-}
-
-
-function prepare_context() {
-    local C_NAME=$(ensure_valid_clustername $1)
-
-#    lxc file push -r -p $MLC_CONTEXT_LOCAL_FOLDER $C_NAME/$MLC_CONTEXT_REMOTE_FOLDER > /dev/null 2> /dev/null
-#    if (($? != 0)); then
-#        p_error "could not stage in the MLC core folder $MLC_CONTEXT_LOCAL_FOLDER"
-#        return 1
-#    fi
-#
-#    if [ -e "$FOLDER" ]; then
-#        lxc file push -r -p $FOLDER/* $C_NAME/etc/context.d/ > /dev/null 2> /dev/null
-#        if (($? != 0)); then
-#            p_error "could not stage in folder $FOLDER"
-#            return 2
-#        fi
-#    fi
-
-    if ! stage_in_folder "$C_NAME" "$MLC_LOCAL_FOLDER" "$MLC_REMOTE_FOLDER"; then
-        p_error "failed to stage in folder $MLC_LOCAL_FOLDER"
-        return 1
-    fi
-
-    return 0
-}
-
-function execute_context() {
-    local C_NAME=$(ensure_valid_clustername $1)
-
-    execute_in_container "$C_NAME" "$MLC_REMOTE_FOLDER/$MLC_SCRIPT_CONTEXT"
-    return $?
 }
 
 function _CONTAINER__ensure_image_exists() {

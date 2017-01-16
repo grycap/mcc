@@ -65,12 +65,11 @@ function execute_command() {
     #
     # This function is intended to enable a "simulation" of an application. The idea will be just to not to execute
     #   the commands or to establish a proxy, etc.
-    echo "EC: $@" >> /tmp/ffff
     $@
     return $?
 }
 
-function _NEW__retry_while() {
+function retry_while() {
     #
     # $ Usage: retry_while <max retries> <output string to retry> commandline
     #
@@ -89,9 +88,7 @@ function _NEW__retry_while() {
     shift
     shift
 
-    echo "RW: $@" >> /tmp/ffff 
     while true; do
-
         # Execute the command and grab the output
         STR_RET=$(execute_command $@ 2>&1)
         RESULT=$?
@@ -159,7 +156,6 @@ function output_to_var_or_fail() {
     shift
 
     # Execute the commandline and grab the result
-    echo "OVOF $@" >> /tmp/ffff
     output="$(execute_command $@)"
     result=$?
 

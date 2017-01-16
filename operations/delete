@@ -77,12 +77,12 @@ function delete() {
         case "$1" in
             --no-delete-network|-n)        DELETENETWORK=False;;
             --force|-f)                 FORCE=True;;
-            --help|-h)                  usage delete && exit 0;;
+            --help|-h)                  _HELP__usage delete && exit 0;;
             --all|-A)                   ALL=True;;
             *)  if [ "$CLUSTERNAME" == "" ]; then 
                     CLUSTERNAME="$1"
                 else
-                    usage addnode && exit 1
+                    _HELP__usage addnode && exit 1
                 fi;;
         esac
         shift

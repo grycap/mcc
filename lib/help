@@ -4,12 +4,13 @@ declare CMD_DESC=()
 
 function _HELP__usage() {
     # 
-    # $ Usage: usage <extra information> <long description>
+    # $ Usage: _HELP__usage <extra information> <long description>
     #
     # Simply shows the commandline
     _HELP__show_cmd_line $1
     if [ "$2" != "" ]; then
-        echo "$2"
+        echo
+        echo "$2" | fold -s -w 80
     fi
     _HELP__show_help
 }

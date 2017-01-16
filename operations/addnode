@@ -30,31 +30,34 @@ function generate_new_node_id() {
 function addnode() {
     local CLUSTERNAME=
     local NODECOUNT=1
-    local WNIMAGE=local:alpine:3.4
+    local WNIMAGE=local:alpine
     local CONTEXTFOLDER
+    local ENTER=False
 
     _HELP__reset_help
     _HELP__add_help_cmd "--node-count|-n <number>" "number of nodes to be added"
-    _HELP__add_help_cmd "--working-node-image|-f <image>" "image to be used for the container"
+    _HELP__add_help_cmd "--working-node-image|-w <image>" "image to be used for the container"
+    _HELP__add_help_cmd "--enter-cluster|-e" "enters in the cluster once added the last host"
     _HELP__add_help_cmd "--help|-h" "shows this help and exists"
     _HELP__add_help_cmd "<cluster name>" "name of the cluster to which the node is going to be added to"
     while (( $# > 0 )); do
         case "$1" in
+            --enter-cluster|-e) ENTER=True;;
             --node-count|-n)    NODECOUNT=$2
                                 shift;;
 
-            --working-node-image|-f)    WNIMAGE=$2
+            --working-node-image|-w)    WNIMAGE=$2
                                         shift;;
 
             --context-folder|-c)        CONTEXTFOLDER=$2
                                         shift;;
 
-            --help|-h)          usage addnode && exit 0;;
+            --help|-h)          _HELP__usage addnode && exit 0;;
 
             *)  if [ "$CLUSTERNAME" == "" ]; then 
                     CLUSTERNAME="$1"
                 else
-                    usage addnode && exit 1
+                    _HELP__usage addnode && exit 1
                 fi;;
         esac
         shift
@@ -106,8 +109,18 @@ function addnode() {
             return 1
         fi
 
+        local PUBKEY
+        output_to_var_or_fail PUBKEY "could not get the public key" _CONTAINER__execute "$CLUSTERNAME" cat "/root/.ssh/id_rsa.pub" || return 7
+        _CONTAINER__execute "$NODENAME" sh -c "mkdir -p ~/.ssh
+touch ~/.ssh/authorized_keys
+echo \"$PUBKEY\" >> ~/.ssh/authorized_keys"
+
         p_out "node $NODENAME successfully added to the cluster"
     done
+
+    if [ "$ENTER" == "True" ]; then
+        enter "$CLUSTERNAME"
+    fi
     
     return 0
 }

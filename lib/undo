@@ -23,8 +23,12 @@ function _UNDO__execute() {
     # $ Usage: _UNDO__execute
     #
     # Executes the list of commands that revert a situation, in the same order that they were issued
-    local LINE
-    while read LINE; do
-        execute_command "$LINE"
-    done <<< "$(echo "${UNDO_CMDS}" | tac - | tail -n +2)"
+    if [ "$UNDO_CMDS" != "" ]; then
+        p_debug "trying to undo the commands"
+    
+        local LINE
+        while read LINE; do
+            execute_command "$LINE"
+        done <<< "$(echo "${UNDO_CMDS}" | tac - | tail -n +2)"
+    fi
 }

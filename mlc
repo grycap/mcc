@@ -47,6 +47,16 @@ while (( $# > 0 )); do
     shift
 done
 
+DESC="MCC - My Container Cluster
+
+This is a tool that helps to create classic computing clusters whose nodes are \
+containers. When creating a cluster, the tool creates a network that will be used by the front-end and the working nodes. \
+Then it launches a front-end that includes several tools to add the working nodes. Later you can add some working nodes to \
+the cluster, and their names will be properly managed by the front-end (i.e. node1, node2, node3...).
+
+All the containers can be contextualized by including a folder of scripts that must be ran when they are started. That folder \
+contains scripts that will be executed in the 'ls' order (i.e. the same mechanism used to execute the scripts in /etc/init.d folder)."
+
 # Add the basic help
 _HELP__add_help_cmd "list" "lists the clusters that are running"
 _HELP__add_help_cmd "addnode" "adds nodes to one cluster"
@@ -62,8 +72,8 @@ while [ $n -lt ${#ARR[@]} -a "$COMMAND" == "" ]; do
     PARAM="${ARR[$n]}"
     case "$PARAM" in
         delnode|enter|list|addnode|create|delete) COMMAND="$PARAM";;
-        --help | -h) _HELP__usage "" && exit 0;;
-        *) usage && exit 1;;
+        --help | -h) _HELP__usage "" "$DESC" && exit 0;;
+        *) _HELP__usage "" "$DESC" && exit 1;;
     esac
     n=$(($n+1))
 done
@@ -75,8 +85,7 @@ check_dependencies || exit -1
 if [ "$COMMAND" != "" ]; then
     $COMMAND "${ARR[@]:$n}"
     if [ $? -ne 0 ]; then
-        echo "trying to undo the commands executed"
-        # _UNDO__execute
+        _UNDO__execute
     fi
 else
     echo "no command issued" && _HELP__usage "" && exit 1

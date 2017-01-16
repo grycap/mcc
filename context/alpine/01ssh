@@ -1,0 +1,5 @@
+#!/bin/sh
+apk add openssh
+rc-update add sshd
+/etc/init.d/sshd start
+exit 0

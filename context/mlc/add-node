@@ -13,5 +13,6 @@ for NODENAME in $NODENAMES; do
     sed -i "/[[:blank:]]\+${NODENAME}\([[:blank:]]\+\|$\)/d" /etc/hosts
 done
 
+echo "" >> /etc/hosts
 echo "${IPADDR} ${NODENAMES}" >> /etc/hosts
 exit 0
