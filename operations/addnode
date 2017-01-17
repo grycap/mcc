@@ -109,6 +109,11 @@ function addnode() {
             return 1
         fi
 
+        if ! _CONTAINER__execute "$NODENAME" "$MCC_REMOTE_FOLDER/$MCC_SCRIPT_ADDNODE" "$NODENAME" "$C_IP" "${CLUSTERNAME}" "node0" "frontend"; then
+            p_error "failed to add cluster ip to the node"
+            return 1
+        fi
+
         local PUBKEY
         output_to_var_or_fail PUBKEY "could not get the public key" _CONTAINER__execute "$CLUSTERNAME" cat "/root/.ssh/id_rsa.pub" || return 7
         _CONTAINER__execute "$NODENAME" sh -c "mkdir -p ~/.ssh
