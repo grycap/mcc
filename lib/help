@@ -1,17 +1,43 @@
 #!/bin/bash
 declare CMD_CMD=()
 declare CMD_DESC=()
+_DESCRIPTION=
+
+COLUMNS=$(tput cols)
+_HELP__MAXWIDTH=${COLUMNS:-80}
+if ((_HELP__MAXWIDTH<60)); then
+    _HELP__MAXWIDTH=60
+fi
+
+function _HELP__set_description() {
+    _DESCRIPTION="$@"
+}
+
+function _HELP__clear_description() {
+    _DESCRIPTION=
+}
+
+function _HELP__append_description() {
+    _DESCRIPTION="$_DESCRIPTION
+
+$@"
+}
 
 function _HELP__usage() {
     # 
     # $ Usage: _HELP__usage <extra information> <long description>
     #
     # Simply shows the commandline
-    _HELP__show_cmd_line $1
-    if [ "$2" != "" ]; then
+    if [ "$_DESCRIPTION" != "" ]; then
         echo
-        echo "$2" | fold -s -w 80
+        echo "$_DESCRIPTION" | fold -s -w $_HELP__MAXWIDTH
+        echo
     fi
+    if [ "$2" != "" ]; then
+        echo "$2" | fold -s -w $_HELP__MAXWIDTH
+        echo
+    fi
+    _HELP__show_cmd_line $1
     _HELP__show_help
 }
 
@@ -67,21 +93,21 @@ function _HELP__fmt_command_out() {
     #   and outputs the command and the description in the format
     #     COMMAND    - DESCRIPTION
     #   adjusting the output to make that the separator is in the same column. This function also makes 
-    #   that the maximum width of all the descriptions does not exceed the 80 characters
+    #   that the maximum width of all the descriptions does not exceed the $_HELP__MAXWIDTH characters
     local max_width=$1
     local cmd=$2
     local desc=$3
-    local padblank=$(printf "%0.1s" " "{0..100})
+    local padblank=$(printf "%${_HELP__MAXWIDTH}s" " ")
     local fmt_str_1="%${max_width}s %s"
     local fmt_str_2="${padblank:0:$((max_width+1))}%s%s"
     local fmt_str=$fmt_str_1
     local cmd_txt=$cmd
     local LINE
     while read LINE; do
-        printf "${fmt_str}\n" "$cmd_txt" "$LINE"
+        printf "  ${fmt_str}\n" "$cmd_txt" "$LINE"
         fmt_str=$fmt_str_2
         cmd_txt=
-    done <<< "$(echo "$desc" | fold -s -w $((80-$max_width)))"
+    done <<< "$(echo "$desc" | fold -s -w $(($_HELP__MAXWIDTH-$max_width)))"
 }
 
 function _HELP__show_cmd_line() {
@@ -92,7 +118,7 @@ function _HELP__show_cmd_line() {
     #   in the help (does not show the help about the commands, just the commandline)
 
     # We accept an extra description/information to show following the name of the command
-    local OSTR="Usage: $0"
+    local OSTR="  Usage: $0"
     if [ "$1" != "" ]; then
         OSTR="$OSTR $1"
     fi

@@ -11,8 +11,12 @@ function create() {
     local DELETE
 
     _HELP__reset_help
+    _HELP__append_description "Creates a cluster, and also creates a dedicated network that will be used to connect the nodes from the cluster. \
+The image specified using the --front-end-image is used to create the front-end. If specified, this command will execute a '$0 addnode' to add \
+the corresponding number of working nodes."
     _HELP__add_help_cmd "<name>" "name of the cluster (default: auto generated name). The name of the cluster MUST follow the format mcc-<name>. If it is not respected, mcc- will be prepended"
-    _HELP__add_help_cmd "--front-end-image|-f <image>" "name of the image to be used for the front-end (default: ubuntu:latest)"
+    _HELP__add_help_cmd "--front-end-image|-f <image>" "name of the image to be used for the front-end (default: $FRONTENDIMAGE)"
+    _HELP__add_help_cmd "--working-node-image|-w <image>" "name of the image to be used for the working nodes (default: $WNIMAGE)"
     _HELP__add_help_cmd "--help|-h" "shows this help and exists"
     _HELP__add_help_cmd "--enter-cluster|-e" "enters in the cluster, in an interactive session, if it is successfully created"
     _HELP__add_help_cmd "--context-folder|-c" "folder that contains the scripts to be executed on contextualization"

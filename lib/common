@@ -1,5 +1,29 @@
 #!/bin/bash
 
+function sanitize_for_sed() {
+    #
+    # $ Usage: sanitize_for_sed <word>
+    #
+    # escapes the needed characters to be used inside a sed expression
+    echo "$1" | sed -e 's/[]\/$*.^|[]/\\&/g'
+}
+
+
+function remove_from_list() {
+    #
+    # $ Usage: remove_existing <elements to remove> <list>
+    #
+    # Removes any of the <elements> from <list>
+    local to_remove=$1
+    local list=$2
+
+    while read -d ' ' w; do
+        w="$(sanitize_for_sed "$w")"
+        list="$(echo "$list" | sed "s/\\([[:blank:]]\\|^\\)$w\\([[:blank:]]\\|\$\\)/\1\2/")"
+    done <<< "${to_remove} "
+    echo "$list"
+}
+
 function var_empty() {
     #
     # $ Usage: var_empty <varname> <message>
