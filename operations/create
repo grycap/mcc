@@ -11,7 +11,7 @@ function create() {
     local DELETE
 
     _HELP__reset_help
-    _HELP__add_help_cmd "<name>" "name of the cluster (default: auto generated name). The name of the cluster MUST follow the format mlc-<name>. If it is not respected, mlc- will be prepended"
+    _HELP__add_help_cmd "<name>" "name of the cluster (default: auto generated name). The name of the cluster MUST follow the format mcc-<name>. If it is not respected, mcc- will be prepended"
     _HELP__add_help_cmd "--front-end-image|-f <image>" "name of the image to be used for the front-end (default: ubuntu:latest)"
     _HELP__add_help_cmd "--help|-h" "shows this help and exists"
     _HELP__add_help_cmd "--enter-cluster|-e" "enters in the cluster, in an interactive session, if it is successfully created"
@@ -64,7 +64,7 @@ function create() {
     fi
 
     # Launch the container that represents the frontend    
-    _MLC__launch_container "$CLUSTERNAME" "$FRONTENDIMAGE" "$MLC_FRONTEND_CONTEXT" "$CONTEXTFOLDER" || return 3
+    _MCC__launch_container "$CLUSTERNAME" "$FRONTENDIMAGE" "$MCC_FRONTEND_CONTEXT" "$CONTEXTFOLDER" || return 3
 
     # We have managed to launch the cluster!
     p_out "$CLUSTERNAME successfully created"

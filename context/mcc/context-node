@@ -1,12 +1,12 @@
 #!/bin/sh
 
-BASEDIR=/etc/mlc.d
+BASEDIR=/etc/mcc.d
 {
 if [ -d $BASEDIR ]; then
     for scriptname in $BASEDIR/*; do
         if [ ! -d "$scriptname" -a -x "$scriptname" ]; then
-            # stdbuf -oL -eL $scriptname > /var/log/mlc.log 2>/var/log/mlc.log
-            $scriptname > /var/log/mlc.log 2>/var/log/mlc.log
+            # stdbuf -oL -eL $scriptname > /var/log/mcc.log 2>/var/log/mcc.log
+            $scriptname > /var/log/mcc.log 2>/var/log/mcc.log
             if [ $? -eq 0 ]; then
                 echo -e "Execution of $scriptname [\e[32msucceeded\e[0m]"
             else

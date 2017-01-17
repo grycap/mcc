@@ -31,10 +31,10 @@ function _CLUSTER__get_list() {
     # Gets the list of clusters
 
     local CONTAINER_STR
-    output_to_var_or_fail CONTAINER_STR "could not get the list of containers" _MLC__get_container_list ||
+    output_to_var_or_fail CONTAINER_STR "could not get the list of containers" _MCC__get_container_list ||
         return 1
 
-    # Only those containers that have the form mlc-<name> are the frontends. If they have a "-node" at the end, they are not clusters themselves
+    # Only those containers that have the form mcc-<name> are the frontends. If they have a "-node" at the end, they are not clusters themselves
     local CNAME CNAME_C
     while read CNAME; do
         CNAME_C="${CNAME%-node*}"
@@ -55,7 +55,7 @@ function _CLUSTER__get_nodes() {
 
     # Get the list of containers
     local CONTAINER_STR
-    output_to_var_or_fail CONTAINER_STR "could not get the list of containers" _MLC__get_container_list ||
+    output_to_var_or_fail CONTAINER_STR "could not get the list of containers" _MCC__get_container_list ||
         return 1
 
     # Only those that have the form CLUSTERNAME-nodeXXX are nodes from the cluster

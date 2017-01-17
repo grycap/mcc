@@ -76,7 +76,7 @@ function addnode() {
     # Now we will get the IP address for the frontend
     p_debug "getting ip address for cluster $CLUSTERNAME in network $NETWORKNAME"
     local C_IP
-    output_to_var_or_fail C_IP "could not get IP address of cluster $CLUSTERNAME" _MLC__get_node_ip "$CLUSTERNAME" ||
+    output_to_var_or_fail C_IP "could not get IP address of cluster $CLUSTERNAME" _MCC__get_node_ip "$CLUSTERNAME" ||
         return 3
     p_debug "ip for cluster $CLUSTERNAME is $C_IP"
 
@@ -95,16 +95,16 @@ function addnode() {
         p_debug "using node name $NODENAME"
 
         # Finally we will launch the container
-        if ! _MLC__launch_container "$NODENAME" "$WNIMAGE" "$CONTEXTFOLDER"; then
+        if ! _MCC__launch_container "$NODENAME" "$WNIMAGE" "$CONTEXTFOLDER"; then
             p_error "failed to launch node $NODENAME ($?)"
             return 5
         fi
 
         local N_IP
-        output_to_var_or_fail N_IP "unexpectedly could not get the IP address again" _MLC__get_node_ip "$NODENAME" || return 6
+        output_to_var_or_fail N_IP "unexpectedly could not get the IP address again" _MCC__get_node_ip "$NODENAME" || return 6
 
         # Finally we MUST add the node to the front-end    
-        if ! _CONTAINER__execute "$CLUSTERNAME" "$MLC_REMOTE_FOLDER/$MLC_SCRIPT_ADDNODE" "$NODENAME" "$N_IP" "${NODEID}" "${NODENAME}" "${NODEID}.${CLUSTERNAME}"; then
+        if ! _CONTAINER__execute "$CLUSTERNAME" "$MCC_REMOTE_FOLDER/$MCC_SCRIPT_ADDNODE" "$NODENAME" "$N_IP" "${NODEID}" "${NODENAME}" "${NODEID}.${CLUSTERNAME}"; then
             p_error "failed to add the node to the cluster"
             return 1
         fi

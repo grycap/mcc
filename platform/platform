@@ -1,9 +1,9 @@
 #!/bin/bash
-# MLC_FOLDER=/home/calfonso/Programacion/git/my_lxd_cluster/
+# MCC_FOLDER=/home/calfonso/Programacion/git/my_lxd_cluster/
 # source ../includes
 
-function _MLC__get_node_ip() {
-    # $ Usage: _MLC__get_node_ip
+function _MCC__get_node_ip() {
+    # $ Usage: _MCC__get_node_ip
     # 
     # Returns the IP of the node in the network of the cluster
     local C_NAME=$1
@@ -16,16 +16,16 @@ function _MLC__get_node_ip() {
     return 0
 }
 
-function _MLC__get_container_list() {
-    # $ Usage: _MLC__get_container_list
+function _MCC__get_container_list() {
+    # $ Usage: _MCC__get_container_list
     # 
     # Returns the list of containers in the platform (those that start by our CONTAINER_PREFIX)
     _CONTAINER__get_list "${CONTAINER_PREFIX}.*"
 }
 
-function _MLC__wait_ip_address() {
+function _MCC__wait_ip_address() {
     #
-    # $ Usage: _MLC__wait_ip_address <container>
+    # $ Usage: _MCC__wait_ip_address <container>
     #
     # Waits for the container to have an IP address in the network of the cluster. It retries 10 times
     local C_NAME=$1
@@ -42,9 +42,9 @@ function _MLC__wait_ip_address() {
     return 0
 }
 
-function _MLC__launch_container() {
+function _MCC__launch_container() {
     #
-    # $ Usage: _MLC__launch_container <container> <image> <context folder> <context folder> ... -- <local folder> <remote folder> ...
+    # $ Usage: _MCC__launch_container <container> <image> <context folder> <context folder> ... -- <local folder> <remote folder> ...
     #
     local C_NAME=$1
     local IMAGENAME=$2
@@ -64,12 +64,12 @@ function _MLC__launch_container() {
 
     # If the container has been launched, we will wait for its IP address
     p_debug "waiting for container to have IP address"
-    output_to_var_or_fail IP -- _MLC__wait_ip_address "$C_NAME" || return 2
+    output_to_var_or_fail IP -- _MCC__wait_ip_address "$C_NAME" || return 2
 
     p_debug "container $C_NAME has IP address $IP"
 
     # For contextualization, we first upload the contextualization files
-    exec_or_fail "failed to upload contextualization files " _CONTAINER__upload_folder_content "$C_NAME" "${MLC_LOCAL_FOLDER}" "$MLC_REMOTE_FOLDER" || 
+    exec_or_fail "failed to upload contextualization files " _CONTAINER__upload_folder_content "$C_NAME" "${MCC_LOCAL_FOLDER}" "$MCC_REMOTE_FOLDER" || 
         return 3
 
     local CONTEXTFOLDER
@@ -77,8 +77,8 @@ function _MLC__launch_container() {
         CONTEXTFOLDER="$1"
         # The upload the contextualization scripts folder (if provided)
         if [ "$CONTEXTFOLDER" != "" ]; then
-            p_debug "uploading the files in folder $CONTEXTFOLDER to folder $MLC_CONTEXT_SCRIPTS_REMOTE_FOLDER"
-            exec_or_fail "failed to upload folder $CONTEXTFOLDER" _CONTAINER__upload_folder_content "$C_NAME" "${CONTEXTFOLDER}" "$MLC_CONTEXT_SCRIPTS_REMOTE_FOLDER" ||
+            p_debug "uploading the files in folder $CONTEXTFOLDER to folder $MCC_CONTEXT_SCRIPTS_REMOTE_FOLDER"
+            exec_or_fail "failed to upload folder $CONTEXTFOLDER" _CONTAINER__upload_folder_content "$C_NAME" "${CONTEXTFOLDER}" "$MCC_CONTEXT_SCRIPTS_REMOTE_FOLDER" ||
                 return 4
         fi
         shift
@@ -102,8 +102,8 @@ function _MLC__launch_container() {
     done
 
     # And we are ready to launch the contextualization script
-    p_debug "executing the contextualization script ${MLC_REMOTE_FOLDER}/$MLC_SCRIPT_CONTEXT in $C_NAME"
-    if ! _CONTAINER__execute "$C_NAME" "${MLC_REMOTE_FOLDER}/$MLC_SCRIPT_CONTEXT"; then
+    p_debug "executing the contextualization script ${MCC_REMOTE_FOLDER}/$MCC_SCRIPT_CONTEXT in $C_NAME"
+    if ! _CONTAINER__execute "$C_NAME" "${MCC_REMOTE_FOLDER}/$MCC_SCRIPT_CONTEXT"; then
         p_error "contextualization returned an error"
         return 5
     fi

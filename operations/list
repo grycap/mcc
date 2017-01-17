@@ -22,7 +22,7 @@ function list() {
 
     if [ "$SHOWNODES" == "True" ]; then 
         # If we wanted to show the nodes, simply show the list of containers in the system
-        _MLC__get_container_list
+        _MCC__get_container_list
         return $?
     else
         # Otherwise, get the information about the clusters and show them

@@ -28,7 +28,7 @@ function enter() {
 
     # enter in the cluster
     local ENTERED=False
-    for shell in $MLC_SHELLS; do
+    for shell in $MCC_SHELLS; do
         p_debug "trying shell $shell"
         if _CONTAINER__execute "$CLUSTERNAME" which "$shell" > /dev/null 2> /dev/null; then
             _CONTAINER__execute "$CLUSTERNAME" "$shell"
@@ -39,7 +39,7 @@ function enter() {
     done
 
     if [ "$ENTERED" != "True" ]; then
-        p_error "did not manage to use any of the configured shells. Please check the MLC_SHELLS variable"
+        p_error "did not manage to use any of the configured shells. Please check the MCC_SHELLS variable"
         return 2
     fi
 
