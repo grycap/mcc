@@ -3,8 +3,6 @@
 MCC_SHAREDFOLDER_PATH=/tmp/mcc
 DEVICES_FILE=devices
 
-# TODO: at this time the devices are not disconnected nor disposed
-
 # DEVICES:
 # - SHARED folder
 #   * for the case that we had a platform with several hosts in which the containers could be

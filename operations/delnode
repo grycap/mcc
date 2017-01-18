@@ -63,7 +63,7 @@ function delnode() {
     for NODENAME in $NODES; do
         if [ "$NODENAME" != "" ]; then
 
-            p_info "disconnecting devices"
+            p_info "disconnecting devices from $NODENAME"
             if ! _MCC__devices_disconnect "$NODENAME"; then
                 p_warning "failed to disconnect some devices"
                 ((FAILED_DISCONNECT++))
@@ -88,7 +88,7 @@ function delnode() {
                 p_out "node $NODENAME removed from cluster $CLUSTERNAME"
             fi
 
-            p_info "disposing devices"
+            p_info "disposing devices from $NODENAME"
             if ! _MCC__devices_dispose "$NODENAME"; then
                 p_warning "failed to dispose some devices"
                 ((FAILED_DISPOSE++))
