@@ -9,6 +9,7 @@ function create() {
     local ENTERCLUSTER
     local CONTEXTFOLDER
     local DELETE
+    local DEVICES
 
     _HELP__reset_help
     _HELP__append_description "Creates a cluster, and also creates a dedicated network that will be used to connect the nodes from the cluster. \
@@ -21,6 +22,7 @@ the corresponding number of working nodes."
     _HELP__add_help_cmd "--enter-cluster|-e" "enters in the cluster, in an interactive session, if it is successfully created"
     _HELP__add_help_cmd "--context-folder|-c" "folder that contains the scripts to be executed on contextualization"
     _HELP__add_help_cmd "--delete-on-exit|-D" "deletes the cluster when exiting the interactive session (implies -e)"
+    _HELP__add_help_cmd "--device|-d" "adds a device to the container ($(_DEVICE__get_available))"
 
     while (( $# > 0 )); do
         case "$1" in
@@ -39,6 +41,9 @@ the corresponding number of working nodes."
                                         shift;;
             --delete-on-exit|-D)    ENTERCLUSTER=True    
                                     DELETE=True;;
+
+            --device|-d)        DEVICES="$DEVICES$2,"
+                                shift;;
 
             --help|-h)          _HELP__usage create && exit 0;;
             *)  if [ "$CLUSTERNAME" == "" ]; then 
