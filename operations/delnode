@@ -58,8 +58,17 @@ function delnode() {
 
     local FAILED=0
     local FAILED_REMOVE=0
+    local FAILED_DISCONNECT=0
+    local FAILED_DISPOSE=0
     for NODENAME in $NODES; do
         if [ "$NODENAME" != "" ]; then
+
+            p_info "disconnecting devices"
+            if ! _MCC__devices_disconnect "$NODENAME"; then
+                p_warning "failed to disconnect some devices"
+                ((FAILED_DISCONNECT++))
+            fi
+
             # Will stop the container and remove it from the cluster
             p_info "stopping the container $NODENAME"
 
@@ -78,12 +87,23 @@ function delnode() {
                 
                 p_out "node $NODENAME removed from cluster $CLUSTERNAME"
             fi
+
+            p_info "disposing devices"
+            if ! _MCC__devices_dispose "$NODENAME"; then
+                p_warning "failed to dispose some devices"
+                ((FAILED_DISPOSE++))
+            fi
         fi
     done
 
     # Show errors if they have happened
     if ((FAILED_REMOVE>0)); then
         p_error "some nodes failed to be removed from the cluster"
+    fi
+
+    if ((FAILED_DISCONNECT>0)) || ((FAILED_DISPOSE>0)); then
+        p_error "failed to deal with the devices"
+        return 2
     fi
 
     if ((FAILED>0)); then

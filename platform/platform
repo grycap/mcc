@@ -2,99 +2,7 @@
 # MCC_FOLDER=/home/calfonso/Programacion/git/my_lxd_cluster/
 # source ../includes
 
-SHAREDFOLDER_PATH=/tmp/mcc
-
-# DEVICES:
-# - SHARED folder
-#   * for the case that we had a platform with several hosts in which the containers could be
-#     hosted, the shared folder could be a folder that is shared using NFS and that is mounted
-#     in the virtualization hosts. Then preparing the shared folder will consist of creating the
-#     folder and we could connect the device.
-#   * a more complex case will be to create the shared folder in a NFS Server, updating the /etc/exports
-#     file, reexporting and mounting on the flight and then the shared folder will be available.
-#     At this time I cannot see any advantage on using this approach (which is complex) instead
-#     of the previous one (which is simple).
-#   * an even more complex case will involve connecting a iscsi end-point, which would be mounted
-#     in a server that will share the filesystem using NFS, etc. And we could use one of the two
-#     previous approaches.
-#
-# - HOME
-#   * is a special case of the shared folder
-#
-# - TODO:
-#   * sysfolder (a folder that already exists in the host is exposed to the container)
-#       > at this time, a shared folder is (in part) a sysfolder which is mounted using NFS and 
-#         where it is created a folder
-#   * sysfile (a file that already exists in the host is exposed to the container)
-#   * gpu (a gpu that can be connected to the container)
-#   * network (other networks than the "cluster one")
-
-function _DEVICE__get_available() {
-    echo "$(typeset -F | grep _DEVICE__ | grep _prepare | awk '{print $3}' | sed 's/_DEVICE__\(.*\)_prepare/\1/g' | tr '\n' ' ' | sed 's/[[:blank:]]*$//')"
-}
-
-function _DEVICE__sharedfolder_prepare() {
-    local C_NAME D_ID D_INFO
-    read C_NAME D_ID D_INFO <<< "$@"
-
-    # We are going to create a folder for the cluster
-    local CLUSTERNAME=$(_NAMING__clustername_from_nodename "$C_NAME")
-    mkdir -p "$SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
-    chmod +x "$SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
-}
-
-function _DEVICE__sharedfolder_connect() {
-    local C_NAME D_ID D_INFO
-    read C_NAME D_ID D_INFO <<< "$@"
-
-    # We are going to add the device to the container in the proper folder
-    local CLUSTERNAME=$(_NAMING__clustername_from_nodename "$C_NAME")
-    lxc config device add "$C_NAME" "$D_ID" disk path="/$D_ID" source="$SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
-}
-
-function _DEVICE__sharedfolder_disconnect() {
-    local C_NAME D_ID D_INFO
-    read C_NAME D_ID D_INFO <<< "$@"
-
-    # Remove the device from the container
-    lxc config device remove "$C_NAME" "$D_ID"
-}
-
-function _DEVICE__sharedfolder_dispose() {
-    local C_NAME D_ID D_INFO
-    read C_NAME D_ID D_INFO <<< "$@"
-
-    # We could delete the shared folder in case that there are not any container using it
-    # - that can be translated into the fact that the cluster does not exist
-    local CLUSTERNAME=$(_NAMING__clustername_from_nodename "$C_NAME")
-
-    if ! _CLUSTER__exists "$CLUSTERNAME"; then
-        p_debug "There are not any container using the folder $D_ID so we are removing it"
-        rm -rf "$SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
-    fi
-    return 0
-}
-
-function _DEVICE__home_prepare() {
-    local C_NAME D_ID D_INFO
-    read C_NAME D_ID D_INFO <<< "$@"
-    _DEVICE__sharedfolder_prepare "$C_NAME" "/home"
-}
-function _DEVICE__home_connect() {
-    local C_NAME D_ID D_INFO
-    read C_NAME D_ID D_INFO <<< "$@"
-    _DEVICE__sharedfolder_connect "$C_NAME" "/home"
-}
-function _DEVICE__home_disconnect() {
-    local C_NAME D_ID D_INFO
-    read C_NAME D_ID D_INFO <<< "$@"
-    _DEVICE__sharedfolder_disconnect "$C_NAME" "/home"
-}
-function _DEVICE__home_dispose() {
-    local C_NAME D_ID D_INFO
-    read C_NAME D_ID D_INFO <<< "$@"
-    _DEVICE__sharedfolder_dispose "$C_NAME" "/home"
-}
+source_folder "$MCC_FOLDER/platform/platform.d/"
 
 function _MCC__get_node_ip() {
     # $ Usage: _MCC__get_node_ip
@@ -515,6 +423,25 @@ function _CONTAINER__upload_file() {
         return 0
     fi
     return 1
+}
+
+function _CONTAINER__download_file() {
+    #
+    # $ Usage: _CONTAINER__download_file <container name> <remote file> <local file>
+    #
+    # Downloads the file to the <folder in container>
+    # * the local folder that should contain the path (along with the intermediate folders) is created if it did not existed before
+    local C_NAME="$1"
+    local R_FILE="$2"
+    local L_FILE="$3"
+
+    # Have to create the folder before because even using -p if the first folder of a path does not exist, lxc file push will fail
+    mkdir -p $(dirname "$L_FILE")
+    lxc file pull "$C_NAME/$R_FILE" "$L_FILE" > /dev/null
+    if (($? != 0)); then
+        return 2
+    fi
+    return 0
 }
 
 function _CONTAINER__ensure_image_exists() {

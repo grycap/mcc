@@ -42,7 +42,7 @@ the corresponding number of working nodes."
             --delete-on-exit|-D)    ENTERCLUSTER=True    
                                     DELETE=True;;
 
-            --device|-d)        DEVICES="$DEVICES$2,"
+            --device|-d)        DEVICES="$DEVICES$2;"
                                 shift;;
 
             --help|-h)          _HELP__usage create && exit 0;;
@@ -72,16 +72,26 @@ the corresponding number of working nodes."
         return 2
     fi
 
+    if [ "$DEVICES" != "" ]; then
+        p_debug "preparing devices" 
+        _MCC__devices_prepare "$CLUSTERNAME" "$DEVICES" || return 4
+    fi
+
     # Launch the container that represents the frontend    
     _MCC__launch_container "$CLUSTERNAME" "$FRONTENDIMAGE" "$MCC_FRONTEND_CONTEXT" "$CONTEXTFOLDER" || return 3
 
     # We have managed to launch the cluster!
     p_out "$CLUSTERNAME successfully created"
 
+    if [ "$DEVICES" != "" ]; then
+        p_debug "connecting devices"
+        _MCC__devices_connect "$CLUSTERNAME" "$DEVICES" || return 4
+    fi
+
     # Try to automatically launch the working nodes
     if ((NODECOUNT>0)); then
         p_info "trying to deploy $NODECOUNT nodes using image $WNIMAGE"
-        if ! addnode "$CLUSTERNAME" -n $NODECOUNT -w "$WNIMAGE" -c "$CONTEXTFOLDER"; then
+        if ! addnode "$CLUSTERNAME" -n $NODECOUNT -w "$WNIMAGE" -c "$CONTEXTFOLDER" -d "$DEVICES"; then
             p_error "failed to add the nodes"
             return 7
         fi

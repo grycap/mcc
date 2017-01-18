@@ -35,7 +35,7 @@ function enter() {
             ENTERED=True
             break;
         fi
-        p_error "could not init session using shell $shell"
+        p_warning "could not init session using shell $shell"
     done
 
     if [ "$ENTERED" != "True" ]; then
