@@ -33,12 +33,14 @@ function addnode() {
     local WNIMAGE=local:alpine
     local CONTEXTFOLDER
     local ENTER=False
+    local DEVICES=
 
     _HELP__reset_help
     _HELP__add_help_cmd "--node-count|-n <number>" "number of nodes to be added"
     _HELP__add_help_cmd "--working-node-image|-w <image>" "image to be used for the container"
     _HELP__add_help_cmd "--enter-cluster|-e" "enters in the cluster once added the last host"
     _HELP__add_help_cmd "--help|-h" "shows this help and exists"
+    _HELP__add_help_cmd "--device|-d" "adds a device to the container ($(_DEVICE__get_available))"
     _HELP__add_help_cmd "<cluster name>" "name of the cluster to which the node is going to be added to"
     while (( $# > 0 )); do
         case "$1" in
@@ -51,6 +53,9 @@ function addnode() {
 
             --context-folder|-c)        CONTEXTFOLDER=$2
                                         shift;;
+
+            --device|-d)        DEVICES="$DEVICES$2;"
+                                shift;;
 
             --help|-h)          _HELP__usage addnode && exit 0;;
 
@@ -94,11 +99,17 @@ function addnode() {
         NODENAME="$CLUSTERNAME-$NODEID"
         p_debug "using node name $NODENAME"
 
+        p_debug "preparing devices" 
+        _MCC__devices_prepare "$NODENAME" "$DEVICES" || return 4
+
         # Finally we will launch the container
         if ! _MCC__launch_container "$NODENAME" "$WNIMAGE" "$CONTEXTFOLDER"; then
             p_error "failed to launch node $NODENAME ($?)"
             return 5
         fi
+
+        p_debug "connecting devices"
+        _MCC__devices_connect "$NODENAME" "$DEVICES" || return 4
 
         local N_IP
         output_to_var_or_fail N_IP "unexpectedly could not get the IP address again" _MCC__get_node_ip "$NODENAME" || return 6

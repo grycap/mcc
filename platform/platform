@@ -2,6 +2,8 @@
 # MCC_FOLDER=/home/calfonso/Programacion/git/my_lxd_cluster/
 # source ../includes
 
+source_folder "$MCC_FOLDER/platform/platform.d/"
+
 function _MCC__get_node_ip() {
     # $ Usage: _MCC__get_node_ip
     # 
@@ -421,6 +423,25 @@ function _CONTAINER__upload_file() {
         return 0
     fi
     return 1
+}
+
+function _CONTAINER__download_file() {
+    #
+    # $ Usage: _CONTAINER__download_file <container name> <remote file> <local file>
+    #
+    # Downloads the file to the <folder in container>
+    # * the local folder that should contain the path (along with the intermediate folders) is created if it did not existed before
+    local C_NAME="$1"
+    local R_FILE="$2"
+    local L_FILE="$3"
+
+    # Have to create the folder before because even using -p if the first folder of a path does not exist, lxc file push will fail
+    mkdir -p $(dirname "$L_FILE")
+    lxc file pull "$C_NAME/$R_FILE" "$L_FILE" > /dev/null
+    if (($? != 0)); then
+        return 2
+    fi
+    return 0
 }
 
 function _CONTAINER__ensure_image_exists() {

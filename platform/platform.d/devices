@@ -1,0 +1,395 @@
+#!/bin/bash
+
+MCC_SHAREDFOLDER_PATH=/tmp/mcc
+MCC_DEVICES_FOLDER_PATH=/tmp/mcc
+MCC_DEVICES_REMOTE_FOLDER_PATH=/etc/mcc/devices/
+DEVICES_FILE=devices
+
+# DEVICES:
+# - SHARED folder
+#   * for the case that we had a platform with several hosts in which the containers could be
+#     hosted, the shared folder could be a folder that is shared using NFS and that is mounted
+#     in the virtualization hosts. Then preparing the shared folder will consist of creating the
+#     folder and we could connect the device.
+#   * a more complex case will be to create the shared folder in a NFS Server, updating the /etc/exports
+#     file, reexporting and mounting on the flight and then the shared folder will be available.
+#     At this time I cannot see any advantage on using this approach (which is complex) instead
+#     of the previous one (which is simple).
+#   * an even more complex case will involve connecting a iscsi end-point, which would be mounted
+#     in a server that will share the filesystem using NFS, etc. And we could use one of the two
+#     previous approaches.
+#
+#   * in case that we wanted to limit the space of disk to share, we could make the following workaround
+#     in the host that is sharing the filesystem:
+#       $ dd if=/dev/zero of=/path/to/shareddisk bs=1G count=1
+#       $ mkfs.ext3 /path/to/shareddisk
+#       $ sudo mount -o loop,rw /path/to/shareddisk /path/to/local/mountpoint
+#
+#     and then make that mount point available for the container. That will limit (and allocate) the 
+#     size of the shared space.
+#
+# - HOME
+#   * is a special case of the shared folder
+#
+# - SYSFOLDER
+#   * sysfolder (a folder that already exists in the host is exposed to the container)
+#       > at this time, a shared folder is (in part) a sysfolder which is mounted using NFS and 
+#         where it is created a folder
+#
+# - TODO:
+#   * sysfile (a file that already exists in the host is exposed to the container)
+#   * gpu (a gpu that can be connected to the container)
+#   * network (other networks than the "cluster one")
+
+function __devices_invoke() {
+    local OP="$1"
+    local C_NAME="$2"
+    local DEVICES="$3"
+
+    # We'll walk through the different devices and make the calls to the proper function
+    #   whose name is _DEVICE__xxxxx_yyyyy, where xxxxx is the type of the device and 
+    #   yyyyy is the operation (prepare, connect, disconnect or dispose)
+    local DEVICE_STR=
+    local PARAMETERS=
+    local DEVICE=
+    local FNC_NAME=
+    local FAILED=0
+    while read -d ';' DEVICE_STR; do
+        IFS='=' read DEVICE PARAMETERS <<< "$DEVICE_STR"
+        if [ "$DEVICE" != "" ]; then
+            FNC_NAME="_DEVICE__${DEVICE}_${OP}"
+            p_debug "op $OP on device $DEVICE: $FNC_NAME $PARAMETERS"
+            $FNC_NAME "$C_NAME" "$PARAMETERS"
+            if (($?!=0)); then
+                ((FAILED++))
+            fi
+        fi
+    done <<< "$DEVICES"
+
+    p_debug "operation $OP with $FAILED devices failed"
+
+    # Return the number of failed devices. 0 will mean success
+    return $FAILED
+}
+
+function _MCC__devices_prepare() {
+    #
+    # $ Usage: _MCC__devices_prepare <container> <devices string>
+    #
+    # Walks through the different devices and invokes the corresponding _prepare function
+    local C_NAME DEVICES 
+    C_NAME="$1"
+    DEVICES="$2"
+
+    # The the available devices
+    local DEVICES_AVAILABLE="$(_DEVICE__get_available)"
+
+    # Now we'll check if the devices requested are available in the system
+    local DEVICE_STR DEVICE PARAMETERS FAIL=False
+    while read -d ';' DEVICE_STR; do
+        IFS='=' read DEVICE PARAMETERS <<< "$DEVICE_STR"
+        if [ "$DEVICE" != "" ]; then
+            if ! element_in_list "$DEVICE" "$DEVICES_AVAILABLE"; then
+                p_error "device $DEVICE is not available"
+                FAIL=True
+            fi
+        fi
+    done <<< "$DEVICES"
+
+    if [ "$FAIL" == "True" ]; then
+        p_error "could not prepare some devices"
+        return 1
+    fi
+
+    # Walk through the devices and invoke the "prepare" function
+    local FAILED
+    __devices_invoke "prepare" "$C_NAME" "$DEVICES"
+    FAILED=$?
+
+    if ((FAILED>0)); then
+        p_error "failed to prepare $FAILED devices"
+        return 1
+    fi
+
+    # Let us persist the devices in a file which is dedicated to the container, in the
+    #   folder reserved to the cluster
+    mkdir -p "$MCC_DEVICES_FOLDER_PATH/$CLUSTERNAME/"
+    local DEVICES_FILENAME="$MCC_DEVICES_FOLDER_PATH/$CLUSTERNAME/${DEVICES_FILE}.${C_NAME}"
+    cat > "$DEVICES_FILENAME" << EOT
+DEVICES="$DEVICES"
+EOT
+
+    return 0
+}
+
+function _MCC__devices_connect() {
+    #
+    # $ Usage: _MCC__devices_connect <container> <devices string>
+    #
+    # Walks through the different devices and invokes the corresponding _connect function
+    local C_NAME DEVICES 
+    C_NAME="$1"
+    DEVICES="$2"
+
+    # This should not happen, but who knows!
+    local DEVICES_FILENAME="$MCC_DEVICES_FOLDER_PATH/$CLUSTERNAME/${DEVICES_FILE}.${C_NAME}"
+    if [ ! -f "$DEVICES_FILENAME" ]; then
+        p_error "failed to find the devices filename"
+        return 1
+    fi
+
+    # If the devices file is prepared, then we'll upload it to the container (in order to be able
+    #   to disconnect the devices even if the local files are lost)
+    if ! _CONTAINER__upload_file "$C_NAME" "$DEVICES_FILENAME" "/${MCC_DEVICES_REMOTE_FOLDER_PATH}/"; then
+        p_error "could not upload the devices file"
+        return 1
+    fi
+
+    # Walk through the devices and invoke the "connect" function
+    local FAILED
+    __devices_invoke "connect" "$C_NAME" "$DEVICES"
+    FAILED=$?
+
+    if ((FAILED>0)); then
+        p_error "failed to prepare $FAILED devices"
+        return 1
+    fi
+
+    return 0
+}
+function _MCC__devices_disconnect() {
+    #
+    # $ Usage: _MCC__devices_connect <container> <devices string>
+    #
+    # Walks through the different devices and invokes the corresponding _connect function
+    local C_NAME DEVICES 
+    C_NAME="$1"
+    DEVICES="$2"
+
+    # This should not happen, but who knows!
+    local DEVICES_FILENAME="${DEVICES_FILE}.${C_NAME}"
+    local L_DEVICES_FILENAME="$MCC_DEVICES_FOLDER_PATH/$CLUSTERNAME/$DEVICES_FILENAME"
+
+    # Now we will get the devices from the devices file in the container
+    if ! _CONTAINER__download_file "$C_NAME" "/${MCC_DEVICES_REMOTE_FOLDER_PATH}/$DEVICES_FILENAME" "$L_DEVICES_FILENAME"; then
+        p_error "could not grab the devices file"
+        return 1
+    fi
+
+    # We parse the file to avoid modifications from the user
+    local DEV_LINE=$(cat "$L_DEVICES_FILENAME" | grep "^DEVICES=" | sed -n 's/^DEVICES="\(.*\)"$/\1/p')
+    DEVICES="$DEVICES;$DEV_LINE"
+
+    # Walk through the devices and invoke the "disconnect" function
+    local FAILED
+    __devices_invoke "disconnect" "$C_NAME" "$DEVICES"
+    FAILED=$?
+
+    if ((FAILED>0)); then
+        p_error "failed to prepare $FAILED devices"
+        return 1
+    fi
+
+    return 0
+}
+
+function _MCC__devices_dispose() {
+    #
+    # $ Usage: _MCC__devices_connect <container> <devices string>
+    #
+    # Walks through the different devices and invokes the corresponding _connect function
+    local C_NAME DEVICES 
+    C_NAME="$1"
+    DEVICES="$2"
+
+    # This should not happen, but who knows!
+    local DEVICES_FILENAME="${DEVICES_FILE}.${C_NAME}"
+    local L_DEVICES_FILENAME="$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$DEVICES_FILENAME"
+
+    # Now we will get the devices from the devices file in the container
+    if [ ! -e "$L_DEVICES_FILENAME" ]; then
+        p_error "the devices filename does not exist"
+        return 1
+    fi
+
+    # We parse the file to avoid modifications from the user
+    local DEV_LINE=$(cat "$L_DEVICES_FILENAME" | grep "^DEVICES=" | sed -n 's/^DEVICES="\(.*\)"$/\1/p')
+    DEVICES="$DEVICES;$DEV_LINE"
+
+    # Walk through the devices and invoke the "dispose" function
+    local FAILED
+    __devices_invoke "dispose" "$C_NAME" "$DEVICES"
+    FAILED=$?
+
+    if ((FAILED>0)); then
+        p_error "failed to prepare $FAILED devices"
+        return 1
+    fi
+    return 0
+}
+
+function _DEVICE__get_available() {
+    # This function retrieves the list of functions in the system and checks if there is an
+    #   application that will prepare a device. In this case, we suppose that it is a type of
+    #   device.
+    echo "$(typeset -F | grep _DEVICE__ | grep _prepare | awk '{print $3}' | sed 's/_DEVICE__\(.*\)_prepare/\1/g' | tr '\n' ' ' | sed 's/[[:blank:]]*$//')"
+}
+
+function __read_vars() {
+    C_NAME="$1"
+    D_ID="$2"
+    shift
+    shift
+    D_INFO="$@"
+    CLUSTERNAME=$(_NAMING__clustername_from_nodename "$C_NAME")
+}
+
+#-----------------------------------------------------------------------------------------
+#
+# DEVICE:
+# $ syspath
+#   maps a path in the host to the container, in the same path
+#   * it is a simple implementation (almost the same than sysfolder), so it can be used 
+#     for files, links, sockets, etc.
+#   * some specialized versions could be created to enable more security or specialized
+#     handling (e.g. folders, unix sockets, files, etc.)
+#
+#-----------------------------------------------------------------------------------------
+function _DEVICE__syspath_prepare() {
+    # 
+    # Type of device sysfolder:
+    #   the ID is the path to the folder. It MUST exist in the host and it will be created in the container
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+
+    if [ "$D_ID" == "" ]; then
+        p_error "the device sysfolder must point to a path"
+        return 1
+    fi
+
+    # In this implementation we are not testing whether it is a folder or not, so
+    if [ ! -e "$D_ID" ]; then
+        p_error "cannot use $D_ID because it is not a path in the host"
+        return 2
+    fi
+    return 0
+}
+function _DEVICE__syspath_connect() {
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+
+    # Finally add the device to the server
+    lxc config device add "$C_NAME" "$D_ID" disk path="/$D_ID" source="/$D_ID"
+}
+function _DEVICE__syspath_disconnect() {
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+
+    # Remove the device from the container
+    lxc config device remove "$C_NAME" "$D_ID"
+}
+function _DEVICE__syspath_dispose() {
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+    return 0
+}
+
+#-----------------------------------------------------------------------------------------
+#
+# DEVICE:
+# $ sharedfolder
+#   creates a folder in a private path for the cluster and makes it available in all the
+#     containers as a "shared using NFS" path
+#   * at this point, this is a "single host implementation". To make it multi-host, it would
+#     be needed to mount the NFS shared path in all the hosts. Then the first one will create
+#     the path and it will be available for all the hosts
+#   * this implementation is (almost) the same than the syspath, but with a dynamically
+#     created folder that is mounted on a path in the container.
+#
+#-----------------------------------------------------------------------------------------
+function _DEVICE__sharedfolder_prepare() {
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+
+    if [ "$D_ID" == "" ]; then
+        p_error "you must provide a path to be shared"
+        return 1
+    fi
+
+    p_debug "creating folder $MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
+    mkdir -p "$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
+    chmod 777 "$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
+}
+function _DEVICE__sharedfolder_connect() {
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+
+    # We are going to simulate that one of the hosts is exporting the shared folder. If there is not any
+    #   node specified, we will suppose that the exporter is the frontend.
+    local C_EXPORTER="$CLUSTERNAME"
+    if [ "$D_INFO" != "" ]; then
+        C_EXPORTER="$D_INFO"
+    fi
+
+    if [ "$C_NAME" == "$C_EXPORTER" ]; then
+        local TMPDIR=$(mktemp -d -p "$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/")
+        lxc file pull -r "$C_NAME/$D_ID" "$TMPDIR"
+        chmod 777 "$TMPDIR/$D_ID"
+        rsync -quar --delete-after "$TMPDIR/$D_ID/" "$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID/"
+        rm -rf "$TMPDIR"
+    fi
+
+    # Finally add the device to the server
+    lxc config device add "$C_NAME" "$D_ID" disk path="/$D_ID" source="$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
+}
+function _DEVICE__sharedfolder_disconnect() {
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+
+    # Remove the device from the container
+    lxc config device remove "$C_NAME" "$D_ID"
+}
+function _DEVICE__sharedfolder_dispose() {
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+
+    # We could delete the shared folder in case that there are not any container using it
+    # - that can be translated into the fact that the cluster does not exist
+    if ! _CLUSTER__exists "$CLUSTERNAME"; then
+        p_debug "There are not any container using the folder $D_ID so we are removing it"
+        rm -rf "$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
+    fi
+    return 0
+}
+#-----------------------------------------------------------------------------------------
+#
+# DEVICE:
+# $ home
+#     this is a special device that simplifies the sharedfolder to create NFS-shared-like
+#       home folder. It is useful for clusters, but is a wrapper or the sharedfolder device
+#       using the path /home
+#
+#-----------------------------------------------------------------------------------------
+function _DEVICE__home_prepare() {
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+    _DEVICE__sharedfolder_prepare "$C_NAME" "/home" "$D_INFO"
+}
+
+function _DEVICE__home_connect() {
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+    _DEVICE__sharedfolder_connect "$C_NAME" "/home" "$D_INFO"
+}
+
+function _DEVICE__home_disconnect() {
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+    _DEVICE__sharedfolder_disconnect "$C_NAME" "/home" "$D_INFO"
+}
+
+function _DEVICE__home_dispose() {
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+    _DEVICE__sharedfolder_dispose "$C_NAME" "/home" "$D_INFO"
+}

@@ -22,6 +22,11 @@ function delete_cluster() {
         fi
     fi
 
+    p_info "disconnecting devices from $CLUSTERNAME"
+    if ! _MCC__devices_disconnect "$CLUSTERNAME"; then
+        p_warning "failed to disconnect some devices from $CLUSTERNAME"
+    fi
+
     p_debug "getting information about the networks used for the container"
     local NETWORKS
     if [ "$DELETENETWORK" == "True" ]; then
@@ -36,6 +41,11 @@ function delete_cluster() {
     if ! _CONTAINER__stop "$CLUSTERNAME"; then
         p_error "could not stop node $CLUSTERNAME"
         return 3
+    fi
+
+    p_info "disposing devices from $CLUSTERNAME"
+    if ! _MCC__devices_dispose "$CLUSTERNAME"; then
+        p_warning "failed to dispose some devices from $CLUSTERNAME"
     fi
 
     if [ "$DELETENETWORK" == "True" ]; then
