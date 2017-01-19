@@ -1,3 +1,23 @@
+#
+# MCC - My Container Cluster
+# https://github.com/dealfonso/my_container_cluster
+#
+# Copyright (C) GRyCAP - I3M - UPV 
+# Developed by Carlos A. caralla@upv.es
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 CURL_CMD="curl -sf --unix-socket /var/lib/lxd/unix.socket http:"
 MCC_REMOTE_FOLDER="/opt/context/mcc"
 MCC_LOCAL_FOLDER="$(dirname $0)/context/mcc"
@@ -6,5 +26,9 @@ MCC_SCRIPT_CONTEXT="context-node"
 MCC_SCRIPT_ADDNODE="add-node"
 MCC_SCRIPT_DELNODE="remove-node"
 MCC_CONTEXT_SCRIPTS_REMOTE_FOLDER="/etc/mcc.d"
+MCC_SHAREDFOLDER_PATH=/tmp/mcc
+MCC_DEVICES_FOLDER_PATH=/tmp/mcc
+MCC_DEVICES_REMOTE_FOLDER_PATH=/etc/mcc/devices/
+DEVICES_FILE=devices
 MAXNODES=100
 MCC_SHELLS="bash sh"
