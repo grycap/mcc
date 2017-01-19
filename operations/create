@@ -72,10 +72,8 @@ the corresponding number of working nodes."
         return 2
     fi
 
-    if [ "$DEVICES" != "" ]; then
-        p_debug "preparing devices" 
-        _MCC__devices_prepare "$CLUSTERNAME" "$DEVICES" || return 4
-    fi
+    p_debug "preparing devices" 
+    _MCC__devices_prepare "$CLUSTERNAME" "$DEVICES" || return 4
 
     # Launch the container that represents the frontend    
     _MCC__launch_container "$CLUSTERNAME" "$FRONTENDIMAGE" "$MCC_FRONTEND_CONTEXT" "$CONTEXTFOLDER" || return 3
@@ -83,10 +81,8 @@ the corresponding number of working nodes."
     # We have managed to launch the cluster!
     p_out "$CLUSTERNAME successfully created"
 
-    if [ "$DEVICES" != "" ]; then
-        p_debug "connecting devices"
-        _MCC__devices_connect "$CLUSTERNAME" "$DEVICES" || return 4
-    fi
+    p_debug "connecting devices"
+    _MCC__devices_connect "$CLUSTERNAME" "$DEVICES" || return 4
 
     # Try to automatically launch the working nodes
     if ((NODECOUNT>0)); then

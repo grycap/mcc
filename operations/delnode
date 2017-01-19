@@ -60,13 +60,16 @@ function delnode() {
     local FAILED_REMOVE=0
     local FAILED_DISCONNECT=0
     local FAILED_DISPOSE=0
+    local FAILED_CURRENT
     for NODENAME in $NODES; do
         if [ "$NODENAME" != "" ]; then
+            FAILED_CURRENT=False
 
             p_info "disconnecting devices from $NODENAME"
             if ! _MCC__devices_disconnect "$NODENAME"; then
                 p_warning "failed to disconnect some devices"
                 ((FAILED_DISCONNECT++))
+                FAILED_CURRENT=True
             fi
 
             # Will stop the container and remove it from the cluster
@@ -75,6 +78,7 @@ function delnode() {
             _CONTAINER__stop "$NODENAME"
             if (($? != 0)); then
                 FAILED=$((FAILED+1))
+                FAILED_CURRENT=True
             else
                 # Finally we MUST remove the node from the front-end    
                 NODEID="$(_NAMING__get_nodeid_from_nodename $NODENAME)"
@@ -83,6 +87,7 @@ function delnode() {
                 if ! _CONTAINER__execute "$CLUSTERNAME" "$MCC_REMOTE_FOLDER/$MCC_SCRIPT_DELNODE" "$NODENAME" "255.255.255.255" "${NODEID}" "${NODENAME}" "${NODEID}.${CLUSTERNAME}"; then
                     p_error "failed to remove the node to the cluster"
                     ((FAILED_REMOVE++))
+                    FAILED_CURRENT=True
                 fi
                 
                 p_out "node $NODENAME removed from cluster $CLUSTERNAME"
@@ -92,6 +97,13 @@ function delnode() {
             if ! _MCC__devices_dispose "$NODENAME"; then
                 p_warning "failed to dispose some devices"
                 ((FAILED_DISPOSE++))
+                FAILED_CURRENT=True
+            fi
+
+            if [ "$FAILED_CURRENT" == "False" ]; then
+                p_info "node $NODENAME deleted"
+            else
+                p_warning "something failed when deleting node $NODENAME"
             fi
         fi
     done
