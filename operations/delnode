@@ -104,7 +104,7 @@ function delnode() {
                 NODEID="$(_NAMING__get_nodeid_from_nodename $NODENAME)"
 
                 p_debug "removing node $NODENAME from the cluster $CLUSTERNAME"
-                if ! _CONTAINER__execute "$CLUSTERNAME" "$MCC_REMOTE_FOLDER/$MCC_SCRIPT_DELNODE" "$NODENAME" "255.255.255.255" "${NODEID}" "${NODENAME}" "${NODEID}.${CLUSTERNAME}"; then
+                if ! _CONTAINER__execute "$CLUSTERNAME" "$MCC_REMOTE_FOLDER/$MCC_SCRIPT_REMOVENODE" "$NODENAME" "255.255.255.255" "${NODEID}" "${NODENAME}" "${NODEID}.${CLUSTERNAME}"; then
                     p_error "failed to remove the node to the cluster"
                     ((FAILED_REMOVE++))
                     FAILED_CURRENT=True

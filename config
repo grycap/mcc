@@ -17,18 +17,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+# COMMON - general variables: path, etc.
+# Commandline to access to the lxd daemon
 CURL_CMD="curl -sf --unix-socket /var/lib/lxd/unix.socket http:"
-MCC_REMOTE_FOLDER="/opt/context/mcc"
-MCC_LOCAL_FOLDER="$(dirname $0)/context/mcc"
+# MCC path where the basic contextualizacion for the front-end is stored (e.g. creation of shared keys for passwordless ssh)
 MCC_FRONTEND_CONTEXT="$(dirname $0)/context/front-end"
+# Names of the executables that will be executed on each corresponding action (i.e. launch the node, add a node to the cluster, remove a node from the cluster)
 MCC_SCRIPT_CONTEXT="context-node"
+# If it exists a folder named addnode.d inside the MCC_CONTEXT_SCRIPTS_REMOTE_FOLDER, its contents will be executed AFTER adding the node
 MCC_SCRIPT_ADDNODE="add-node"
-MCC_SCRIPT_DELNODE="remove-node"
-MCC_CONTEXT_SCRIPTS_REMOTE_FOLDER="/etc/mcc.d"
-MCC_SHAREDFOLDER_PATH=/tmp/mcc
-MCC_DEVICES_FOLDER_PATH=/tmp/mcc
-MCC_DEVICES_REMOTE_FOLDER_PATH=/etc/mcc/devices/
-DEVICES_FILE=devices
+# If it exists a folder named removenode.d inside the MCC_CONTEXT_SCRIPTS_REMOTE_FOLDER, its contents will be executed BEFORE removing the node
+MCC_SCRIPT_REMOVENODE="remove-node"
+# Local path where the previous files are stored
+MCC_LOCAL_FOLDER="$(dirname $0)/context/mcc"
+# Path in the container where the previous files are stored (in the container)
+MCC_REMOTE_FOLDER="/opt/context/mcc"
+# Path in the container where the contextualization scripts will be stored (those that will be executed on the creation of the node)
+# * warning: this MUST coincide with the path in the file context-node
+MCC_CONTEXT_SCRIPTS_REMOTE_FOLDER="/etc/mcc/"
+# The maximum number of nodes for any cluster (this should be moved to per-cluster)
 MAXNODES=100
+# Possible shells in the container (for the option --enter-cluster)
 MCC_SHELLS="bash sh"
+
+# DEVICES - devices-related variables
+
+# Path where the devices shared folders will be stored (in this path, MCC will create a folder per each cluster that needs a shared folder)
+MCC_SHAREDFOLDER_PATH=/tmp/mcc
+# Path where the description of the devices will be stored (in this path, MCC will create a folder per each cluster that needs devices)
+MCC_DEVICES_FOLDER_PATH=/tmp/mcc
+# Path where the file that describes the devices is stored in the container
+MCC_DEVICES_REMOTE_FOLDER_PATH=/etc/mcc/devices/
+# Base filename for the devices filename. The name convention will be ${MCC_DEVICES_FILE}.nodename
+MCC_DEVICES_FILE=devices

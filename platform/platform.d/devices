@@ -19,7 +19,6 @@
 # limitations under the License.
 #
 
-
 # DEVICES:
 # - SHARED folder
 #   * for the case that we had a platform with several hosts in which the containers could be
@@ -129,7 +128,7 @@ function _MCC__devices_prepare() {
     # Let us persist the devices in a file which is dedicated to the container, in the
     #   folder reserved to the cluster
     mkdir -p "$MCC_DEVICES_FOLDER_PATH/$CLUSTERNAME/"
-    local DEVICES_FILENAME="$MCC_DEVICES_FOLDER_PATH/$CLUSTERNAME/${DEVICES_FILE}.${C_NAME}"
+    local DEVICES_FILENAME="$MCC_DEVICES_FOLDER_PATH/$CLUSTERNAME/${MCC_DEVICES_FILE}.${C_NAME}"
     cat > "$DEVICES_FILENAME" << EOT
 DEVICES="$DEVICES"
 EOT
@@ -147,7 +146,7 @@ function _MCC__devices_connect() {
     DEVICES="$2"
 
     # This should not happen, but who knows!
-    local DEVICES_FILENAME="$MCC_DEVICES_FOLDER_PATH/$CLUSTERNAME/${DEVICES_FILE}.${C_NAME}"
+    local DEVICES_FILENAME="$MCC_DEVICES_FOLDER_PATH/$CLUSTERNAME/${MCC_DEVICES_FILE}.${C_NAME}"
     if [ ! -f "$DEVICES_FILENAME" ]; then
         p_error "failed to find the devices filename"
         return 1
@@ -182,7 +181,7 @@ function _MCC__devices_disconnect() {
     DEVICES="$2"
 
     # This should not happen, but who knows!
-    local DEVICES_FILENAME="${DEVICES_FILE}.${C_NAME}"
+    local DEVICES_FILENAME="${MCC_DEVICES_FILE}.${C_NAME}"
     local L_DEVICES_FILENAME="$MCC_DEVICES_FOLDER_PATH/$CLUSTERNAME/$DEVICES_FILENAME"
 
     # Now we will get the devices from the devices file in the container
@@ -218,7 +217,7 @@ function _MCC__devices_dispose() {
     DEVICES="$2"
 
     # This should not happen, but who knows!
-    local DEVICES_FILENAME="${DEVICES_FILE}.${C_NAME}"
+    local DEVICES_FILENAME="${MCC_DEVICES_FILE}.${C_NAME}"
     local L_DEVICES_FILENAME="$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$DEVICES_FILENAME"
 
     # Now we will get the devices from the devices file in the container

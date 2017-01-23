@@ -35,4 +35,18 @@ done
 
 echo "" >> /etc/hosts
 echo "${IPADDR} ${NODENAMES}" >> /etc/hosts
-exit 0
+
+BASEDIR=/etc/mcc/addnode.d
+error=0
+if [ -d $BASEDIR ]; then
+    for scriptname in $BASEDIR/*; do
+        if [ ! -d "$scriptname" -a -x "$scriptname" ]; then
+            $scriptname > /var/log/mcc-addnode.log 2>/var/log/mcc-addnode.log
+            if [ $? -ne 0 ]; then
+                error=$[ $error + 1 ]
+            fi
+        fi
+    done
+fi
+
+exit $error
