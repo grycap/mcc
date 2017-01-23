@@ -37,7 +37,7 @@ the corresponding number of working nodes."
 
             --enter-cluster|-e)     ENTERCLUSTER=True;;
 
-            --context-folder|-c)        CONTEXTFOLDER=$2
+            --context-folder|-c)        CONTEXTFOLDER="$2"
                                         shift;;
             --delete-on-exit|-D)    ENTERCLUSTER=True    
                                     DELETE=True;;

@@ -5,6 +5,19 @@ shift
 shift
 NODENAMES="$@"
 
+BASEDIR=/etc/mcc/removenode.d
+error=0
+if [ -d $BASEDIR ]; then
+    for scriptname in $BASEDIR/*; do
+        if [ ! -d "$scriptname" -a -x "$scriptname" ]; then
+            $scriptname > /var/log/mcc-delnode.log 2>/var/log/mcc-delnode.log
+            if [ $? -ne 0 ]; then
+                error=$[ $error + 1 ]
+            fi
+        fi
+    done
+fi
+
 # First of all, we remove all the entries in /etc/hosts that contain the IP address
 sed -i "/^[[:blank:]]*${IPADDR}[[:blank:]]\+/d" /etc/hosts
 
@@ -14,4 +27,4 @@ for NODENAME in $NODENAMES; do
 done
 
 echo "127.0.0.1 ${NODENAMES}" >> /etc/hosts
-exit 0
+exit error
