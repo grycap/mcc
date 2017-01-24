@@ -41,9 +41,10 @@ error=0
 if [ -d $BASEDIR ]; then
     for scriptname in $BASEDIR/*; do
         if [ ! -d "$scriptname" -a -x "$scriptname" ]; then
-            $scriptname > /var/log/mcc-addnode.log 2>/var/log/mcc-addnode.log
+            echo "[$(date)] $scriptname \"$CONTAINERNAME\" \"$IPADDR\" \"$@\"" >> /var/log/mcc-addnode.log 2>> /var/log/mcc-addnode.log
+            $scriptname "$CONTAINERNAME" "$IPADDR" "$@" >> /var/log/mcc-addnode.log 2>> /var/log/mcc-addnode.log
             if [ $? -ne 0 ]; then
-                error=$[ $error + 1 ]
+                error=$((error+1))
             fi
         fi
     done

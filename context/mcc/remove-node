@@ -30,9 +30,10 @@ error=0
 if [ -d $BASEDIR ]; then
     for scriptname in $BASEDIR/*; do
         if [ ! -d "$scriptname" -a -x "$scriptname" ]; then
-            $scriptname > /var/log/mcc-delnode.log 2>/var/log/mcc-delnode.log
+            echo "[$(date)] $scriptname \"$CONTAINERNAME\" \"$IPADDR\" \"$@\"" >> /var/log/mcc-removenode.log 2>> /var/log/mcc-removenode.log
+            $scriptname "$CONTAINERNAME" "$IPADDR" "$@" >> /var/log/mcc-removenode.log 2>> /var/log/mcc-removenode.log
             if [ $? -ne 0 ]; then
-                error=$[ $error + 1 ]
+                error=$((error+1))
             fi
         fi
     done
@@ -47,4 +48,4 @@ for NODENAME in $NODENAMES; do
 done
 
 echo "127.0.0.1 ${NODENAMES}" >> /etc/hosts
-exit error
+exit $error

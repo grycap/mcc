@@ -22,13 +22,14 @@
 function create() {
     local NODECOUNT=0
     local FRONTENDIMAGE=local:alpine
-    local WNIMAGE=local:alpine
+    local WNIMAGE
     local CLUSTERNAME
     local NETWORKNAME
     local ENTERCLUSTER
     local CONTEXTFOLDER
     local DELETE
     local DEVICES
+    local CONTEXTFOLDERWN
 
     _HELP__reset_help
     _HELP__append_description "Creates a cluster, and also creates a dedicated network that will be used to connect the nodes from the cluster. \
@@ -36,10 +37,11 @@ The image specified using the --front-end-image is used to create the front-end.
 the corresponding number of working nodes."
     _HELP__add_help_cmd "<name>" "name of the cluster (default: auto generated name). The name of the cluster MUST follow the format mcc-<name>. If it is not respected, mcc- will be prepended"
     _HELP__add_help_cmd "--front-end-image|-f <image>" "name of the image to be used for the front-end (default: $FRONTENDIMAGE)"
-    _HELP__add_help_cmd "--working-node-image|-w <image>" "name of the image to be used for the working nodes (default: $WNIMAGE)"
+    _HELP__add_help_cmd "--working-node-image|-w <image>" "name of the image to be used for the working nodes (default: the same than frontend)"
     _HELP__add_help_cmd "--help|-h" "shows this help and exists"
     _HELP__add_help_cmd "--enter-cluster|-e" "enters in the cluster, in an interactive session, if it is successfully created"
     _HELP__add_help_cmd "--context-folder|-c" "folder that contains the scripts to be executed on contextualization"
+    _HELP__add_help_cmd "--context-folder-wn|-C" "folder that contains the scripts to be executed on contextualization in the working node (if -n is set to greater than 0)"
     _HELP__add_help_cmd "--delete-on-exit|-D" "deletes the cluster when exiting the interactive session (implies -e)"
     _HELP__add_help_cmd "--device|-d" "adds a device to the container ($(_DEVICE__get_available))"
 
@@ -58,6 +60,10 @@ the corresponding number of working nodes."
 
             --context-folder|-c)        CONTEXTFOLDER="$2"
                                         shift;;
+
+            --context-folder-wn|-C)        CONTEXTFOLDERWN="$2"
+                                                shift;;
+
             --delete-on-exit|-D)    ENTERCLUSTER=True    
                                     DELETE=True;;
 
@@ -104,9 +110,13 @@ the corresponding number of working nodes."
     _MCC__devices_connect "$CLUSTERNAME" "$DEVICES" || return 4
 
     # Try to automatically launch the working nodes
+    if [ "$WNIMAGE" == "" ]; then
+        WNIMAGE="$FRONTENDIMAGE"
+    fi
+
     if ((NODECOUNT>0)); then
         p_info "trying to deploy $NODECOUNT nodes using image $WNIMAGE"
-        if ! addnode "$CLUSTERNAME" -n $NODECOUNT -w "$WNIMAGE" -c "$CONTEXTFOLDER" -d "$DEVICES"; then
+        if ! addnode "$CLUSTERNAME" -n $NODECOUNT -w "$WNIMAGE" -c "$CONTEXTFOLDERWN" -d "$DEVICES"; then
             p_error "failed to add the nodes"
             return 7
         fi

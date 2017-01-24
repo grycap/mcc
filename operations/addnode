@@ -134,6 +134,11 @@ function addnode() {
         local N_IP
         output_to_var_or_fail N_IP "unexpectedly could not get the IP address again" _MCC__get_node_ip "$NODENAME" || return 6
 
+        local PUBKEY
+        output_to_var_or_fail PUBKEY "could not get the public key" _CONTAINER__execute "$CLUSTERNAME" cat "/root/.ssh/id_rsa.pub" || return 7
+        _CONTAINER__execute "$NODENAME" sh -c "mkdir -p ~/.ssh
+echo \"$PUBKEY\" > ~/.ssh/authorized_keys"
+
         # Finally we MUST add the node to the front-end    
         if ! _CONTAINER__execute "$CLUSTERNAME" "$MCC_REMOTE_FOLDER/$MCC_SCRIPT_ADDNODE" "$NODENAME" "$N_IP" "${NODEID}" "${NODENAME}" "${NODEID}.${CLUSTERNAME}"; then
             p_error "failed to add the node to the cluster"
@@ -144,12 +149,6 @@ function addnode() {
             p_error "failed to add cluster ip to the node"
             return 1
         fi
-
-        local PUBKEY
-        output_to_var_or_fail PUBKEY "could not get the public key" _CONTAINER__execute "$CLUSTERNAME" cat "/root/.ssh/id_rsa.pub" || return 7
-        _CONTAINER__execute "$NODENAME" sh -c "mkdir -p ~/.ssh
-touch ~/.ssh/authorized_keys
-echo \"$PUBKEY\" >> ~/.ssh/authorized_keys"
 
         p_out "node $NODENAME successfully added to the cluster"
     done

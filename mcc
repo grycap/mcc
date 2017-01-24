@@ -67,6 +67,7 @@ while (( $# > 0 )); do
 done
 
 UNDO=True
+VERBOSE=False
 _HELP__set_description "MCC - My Container Cluster - Automating the creation of container based clusters"
 DESC="This is a tool that helps to create classic computing clusters whose nodes are \
 containers. When creating a cluster, the tool creates a network that will be used by the front-end and the working nodes. \
@@ -79,6 +80,7 @@ contains scripts that will be executed in the 'ls' order (i.e. the same mechanis
 # Add the basic help
 _HELP__add_help_cmd "--help|-h" "shows this help and exits"
 _HELP__add_help_cmd "--no-undo|-N" "does not try to undo the commands"
+_HELP__add_help_cmd "--verbose|-v" "display debug messages"
 _HELP__add_help_cmd "list" "lists the clusters that are running"
 _HELP__add_help_cmd "addnode" "adds nodes to one cluster"
 _HELP__add_help_cmd "create" "creates one cluster"
@@ -94,6 +96,7 @@ while [ $n -lt ${#ARR[@]} -a "$COMMAND" == "" ]; do
     case "$PARAM" in
         delnode|enter|list|addnode|create|delete) COMMAND="$PARAM";;
         --no-undo | -N) UNDO=False;;
+        --verbose | -V) VERBOSE=True;;
         --help | -h) _HELP__usage "" "$DESC" && exit 0;;
         *) _HELP__usage "" "$DESC" && exit 1;;
     esac

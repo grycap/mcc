@@ -265,7 +265,9 @@ function exec_and_fail() {
 
 
 function p_debug() {
-    echo "[DEBUG] $@"
+    if [ "$VERBOSE" == "True" ]; then
+        echo "[DEBUG] $@"
+    fi
 }
 
 function p_info() {

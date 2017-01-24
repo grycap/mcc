@@ -19,7 +19,7 @@
 # limitations under the License.
 #
 
-BASEDIR=/etc/mcc/
+BASEDIR=/etc/mcc/contextnode.d
 {
 if [ -d $BASEDIR ]; then
     for scriptname in $BASEDIR/*; do

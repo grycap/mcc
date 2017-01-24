@@ -96,8 +96,8 @@ function _MCC__launch_container() {
         CONTEXTFOLDER="$1"
         # The upload the contextualization scripts folder (if provided)
         if [ "$CONTEXTFOLDER" != "" ]; then
-            p_debug "uploading the files in folder $CONTEXTFOLDER to folder $MCC_CONTEXT_SCRIPTS_REMOTE_FOLDER"
-            exec_or_fail "failed to upload folder $CONTEXTFOLDER" _CONTAINER__upload_folder_content "$C_NAME" "${CONTEXTFOLDER}" "$MCC_CONTEXT_SCRIPTS_REMOTE_FOLDER" ||
+            p_debug "uploading the files in folder $CONTEXTFOLDER to folder $MCC_ETC_REMOTE_FOLDER"
+            exec_or_fail "failed to upload folder $CONTEXTFOLDER" _CONTAINER__upload_folder_content "$C_NAME" "${CONTEXTFOLDER}" "$MCC_ETC_REMOTE_FOLDER" ||
                 return 4
         fi
         shift
@@ -253,7 +253,7 @@ function _CONTAINER__launch() {
     _NETWORK__ensure_exists "$C_NETWORK" "True" || return 2
     _CONTAINER__ensure_image_exists "$C_IMAGE" || return 3
 
-    execute_command lxc launch -n "$C_NETWORK" -e $C_IMAGE "$C_NAME" > /dev/null
+    execute_command lxc launch -n "$C_NETWORK" -e $C_IMAGE "$C_NAME" "$LXC_LAUNCH_OPTS" > /dev/null
     if (( $? == 0 )); then
         p_debug "container $C_NAME successfully launched"
         # As we are using ephemeral containers, we do not need to delete them
@@ -300,7 +300,7 @@ function _NETWORK__create() {
     p_info "creating network $NETWORKNAME"
 
     local ERR
-    ERR=$(execute_command lxc network create "$NETWORKNAME" 2>&1)
+    ERR=$(execute_command lxc network create "$NETWORKNAME" "$LXC_NETWORK_CREATE_OPTS" 2>&1)
     if (($?!=0)); then
         p_error "failed to create network $NETWORKNAME ($ERR)"
         return 1
@@ -386,7 +386,7 @@ function _NETWORK__ensure_exists() {
             p_info "creating network $NETWORKNAME"
 
             local ERR
-            ERR=$(execute_command lxc network create "$NETWORKNAME" 2>&1)
+            ERR=$(execute_command lxc network create "$NETWORKNAME" "$LXC_NETWORK_CREATE_OPTS" 2>&1)
             if (($?!=0)); then
                 p_error "failed to create network $NETWORKNAME ($ERR)"
                 return 3
@@ -407,15 +407,15 @@ function _CONTAINER__upload_folder_content() {
     local C_NAME="$1"
     local L_FOLDER="$2"
     local R_FOLDER="$3"
+    local C_FILE=
 
     if [ -d "$L_FOLDER" ]; then
         # Have to create the folder before because even using -p if the first folder of a path does not exist, lxc file push will fail
         lxc exec "$C_NAME" -- mkdir -p "$R_FOLDER" > /dev/null
-        lxc file push -p "$L_FOLDER/"* "$C_NAME/$R_FOLDER/" > /dev/null
-        if (($? != 0)); then
-            return 2
-        fi
-        return 0
+
+        # Updated implementation according to https://github.com/lxc/lxd/issues/1218
+        tar c -C "$L_FOLDER" . | lxc exec "$C_NAME" -- tar xf - -C "$R_FOLDER" 
+        return $?
     fi
     return 1
 }
