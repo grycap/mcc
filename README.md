@@ -46,6 +46,29 @@ Using the classic ```--help``` flag, each function will provide help about its u
 $ ./mcc create --help
 ```
 
+## MCC and LXD
+MCC is currently very tightened to LXD, but it will be easy to implement some functions to integrate with e.g. Docker (see section 'Internals').
+
+Anyway, it is advisable that you create a profile dedicated to _mcc_, in order to be able to manage the features of the containers. E.g. the _default_ profile contains a network device in _eth0_ and that will make that _mcc_ will not work. So it is recommended to create a profile named mcc:
+
+```bash
+lxc profile create mcc
+```
+
+And then configure _mcc_ to use it in the config file, by adding "-p mcc" to the variable LXC_LAUNCH_OPTS. E.g.:
+```bash
+LXC_LAUNCH_OPTS='-p mcc'
+```
+
+### Privileged containers
+Sometimes you will need privileged containers. In that case, you can add that feature in the profile:
+
+```bash
+lxc profile set mcc security.privileged true
+```
+
+In my case, I needed to launch docker containers _inside_ the LXC-based _mcc_ cluster, and I wanted to set the user that launched the container using the _-u_ option of _docker run_.
+
 ## Internals (for developers)
 
 ### Multiple host

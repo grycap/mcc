@@ -264,6 +264,100 @@ function _CONTAINER__launch() {
     fi
 }
 
+function _CONTAINER__uidmap() {
+    #
+    # $ Usage: _CONTAINER__uidmap <container>
+    #   Get the mappings of the users in the host to the users inside the container with lines with format
+    #   <base uid in host>:<count>:<shift>
+    #
+    # * WARNING: this may seem very LXD dependent, but docker also is able to remap users. It is possible to launch docker
+    #       using docker daemon --userns-remap=user (user has to be in /etc/subuid)
+    local C_NAME="$1"
+    local MAP=
+    local base range shifting MAPPING
+
+    MAP="$(printf "$($CURL_CMD/1.0/containers/$C_NAME |  jq '.metadata.expanded_config."volatile.idmap.next"' | sed 's/^"\(.*\)"$/\1/')\n")"
+    if (($?==0)); then
+        echo "$MAP" | jq '.[] | select(."Isuid"==true) | (.Nsid|tostring)+":"+((.Maprange+.Nsid)|tostring)+":"+(.Hostid-.Nsid|tostring)' | tr -d '"' | sort -u
+        return 0
+    else
+        echo "error"
+        return 1
+    fi
+}
+
+function _CONTAINER__gidmap() {
+    #
+    # $ Usage: _CONTAINER__gidmap <container>
+    #   Get the mappings of the users in the host to the users inside the container with lines with format
+    #   <base gid in host>:<count>:<shift>
+    #
+    # * WARNING: this may seem very LXD dependent, but docker also is able to remap users. It is possible to launch docker
+    #       using docker daemon --userns-remap=user (user has to be in /etc/subuid)
+    local C_NAME="$1"
+    local MAP=
+    local base range shifting MAPPING
+
+    MAP="$(printf "$($CURL_CMD/1.0/containers/$C_NAME |  jq '.metadata.expanded_config."volatile.idmap.next"' | sed 's/^"\(.*\)"$/\1/')\n")"
+    if (($?==0)); then
+        echo "$MAP" | jq '.[] | select(."Isgid"==true) | (.Nsid|tostring)+":"+((.Maprange+.Nsid)|tostring)+":"+(.Hostid-.Nsid|tostring)' | tr -d '"' | sort -u
+        return 0
+    else
+        echo "error"
+        return 1
+    fi
+}
+
+function _CONTAINER__remap_uid() {
+    #
+    # $ Usage: _CONTAINER__remap_uid <container> <uid in container> [ <uid map> ]
+    #
+    # Gets the uid in the host of the uid in the container
+    #
+    local C_NAME="$1"
+    local uid="$2"
+    local UIDMAP="$3"
+
+    if [ "$UIDMAP" == "" ]; then
+        UIDMAP=$(_CONTAINER__uidmap "$C_NAME")
+    fi
+
+    local min max shifting UIDRANGE
+    while read UIDRANGE; do
+        IFS=':' read min max shifting <<< "$UIDRANGE"
+        if ((uid>=min && uid<max)); then
+            echo "$((uid+shifting))"
+            return 0
+        fi
+    done <<< "$UIDMAP"
+    return 1
+}
+
+function _CONTAINER__remap_gid() {
+    #
+    # $ Usage: _CONTAINER__remap_gid <container> <gid in container> [ <gid map> ]
+    #
+    # Gets the gid in the host of the gid in the container
+    #
+    local C_NAME="$1"
+    local gid="$2"
+    local GIDMAP="$3"
+
+    if [ "$GIDMAP" == "" ]; then
+        GIDMAP=$(_CONTAINER__gidmap "$C_NAME")
+    fi
+
+    local min max shifting GIDRANGE
+    while read GIDRANGE; do
+        IFS=':' read min max shifting <<< "$GIDRANGE"
+        if ((gid>=min && gid<max)); then
+            echo "$((gid+shifting))"
+            return 0
+        fi
+    done <<< "$GIDMAP"
+    return 1
+}
+
 function _NETWORK__exists() {
     #
     # $ Usage: _NETWORK__exists <network name>

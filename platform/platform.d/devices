@@ -334,6 +334,58 @@ function _DEVICE__sharedfolder_prepare() {
     mkdir -p "$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
     chmod 777 "$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
 }
+function _remap_sharedfolder() {
+    # 
+    # $ Usage: _remap_sharedfolder <container> <folder in container> <local folder (where the folder in container has been copied)>
+    #
+    # This function reads the owner of the folders in the <folder in the container>, calculates the user id in the host and chowns
+    #   the folders in the <local folder>, where the contents of the folder in the container are supposed to have been stored.
+    #
+    # * WARNING: it recalls in "sudo" to chown the folders.
+    # * WARNING: it only checks a depth of 2 folders (inner folders may have different owners)
+    #
+    local C_NAME="$1"
+    local R_FOLDER="$2"
+    local L_FOLDER="$3"
+    local PERMISSIONS_LINES PERMISSION_STR uid gid mask
+
+    # Get the owners of the folders in the container (it will get lines with the format "uid:gid:mask /path/to folder/with spaces")
+    PERMISSIONS_LINES=$(_CONTAINER__execute "$C_NAME" bash -c "find '$R_FOLDER' -type d -mindepth 1 -maxdepth 2 -printf '%U:%G:%m %P\n' 2> /dev/null")
+    if (($?!=0)); then
+        p_error "could not get the permissions of folder $B_FOLDER in container $C_NAME"
+        return 1
+    fi
+
+    # Get the uid and gid maps
+    local UIDMAP GIDMAP SUDO_FAILED 
+    UIDMAP=$(_CONTAINER__uidmap "$C_NAME")
+    GIDMAP=$(_CONTAINER__gidmap "$C_NAME")
+
+    p_warning "You will probably be asked to provide sudo password (to chown the $L_FOLDER folder)"
+
+    # This is just to test that sudo is working and that the user enters the password
+    sudo chown --version > /dev/null 2> /dev/null
+
+    if (($?==0)); then
+
+        # For each folder, calculate the new uids and gids (according to the maps) and set the new permissions
+        while read PERMISSION_STR C_FOLDER && [ "$SUDO_FAILED" != "True" ]; do
+            if [ "$PERMISSION_STR" != "" ]; then
+                IFS=':' read uid gid mask <<<"$PERMISSION_STR"
+                uid_SHIFT=$(_CONTAINER__remap_uid "$C_NAME" "$uid" "$UIDMAP")
+                gid_SHIFT=$(_CONTAINER__remap_gid "$C_NAME" "$gid" "$GIDMAP")
+                sudo chown -R $uid_SHIFT:$gid_SHIFT "$L_FOLDER/$C_FOLDER" 2> /dev/null
+            fi
+        done <<< "$PERMISSIONS_LINES"
+
+        # Make sudo forget the password
+        sudo -K
+    else
+        p_warning "failed to change permissions to the exported shared folder $B_FOLDER because it recalls on sudo-ability"
+    fi
+    return 0
+}
+
 function _DEVICE__sharedfolder_connect() {
     local C_NAME D_ID D_INFO CLUSTERNAME
     __read_vars "$@"
@@ -348,9 +400,18 @@ function _DEVICE__sharedfolder_connect() {
     if [ "$C_NAME" == "$C_EXPORTER" ]; then
         local TMPDIR=$(mktemp -d -p "$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/")
         lxc file pull -r "$C_NAME/$D_ID" "$TMPDIR"
+
         chmod 777 "$TMPDIR/$D_ID"
         rsync -quar --delete-after "$TMPDIR/$D_ID/" "$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID/"
         rm -rf "$TMPDIR"
+
+        # This is an advanced feature that is related to the fact that the permissions of the users are shifted (the uids and
+        #   gids are remapped). So the uid that accedes a file in the real host is different than the uid inside the container.
+        #   So we change the permissions to fit this remap.
+        if [ "$MCC_DEVICES_SHAREDFOLDER_REMAP_PERMISSIONS" == "True" ]; then
+            p_debug "trying to remap the permissions of the exported shared folder"
+            _remap_sharedfolder "$C_NAME" "$D_ID" "$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
+        fi
     fi
 
     # Finally add the device to the server

@@ -51,12 +51,16 @@ MCC_DEVICES_FOLDER_PATH=/tmp/mcc
 MCC_DEVICES_REMOTE_FOLDER_PATH=/etc/mcc/devices/
 # Base filename for the devices filename. The name convention will be ${MCC_DEVICES_FILE}.nodename
 MCC_DEVICES_FILE=devices
+# This flag set to "True" (take care of the letter case) will try to chown the folders of a shared folders to the proper permissions 
+#   in the container that is pseudo-exporting it taking into account the id remapping
+MCC_DEVICES_SHAREDFOLDER_REMAP_PERMISSIONS=True
 
 # Platform
 
 # Additional options to the lxc commandline to launch a container
 # * this is specially useful to include the profile to be used (e.g. the default profile already has a NIC that will not be useful for us
 #   because we want our FIRST NIC to connect then cluster)
-LXC_LAUNCH_OPTS="-p mcc"
+# In order to be easier to launch containers, I enable to get the options from a variable in env
+LXC_LAUNCH_OPTS=${MCC_LXC_LAUNCH_OPTS:-"-p mcc"}
 # Additional options to be included when creating a network (is of special interest to attach to specific bridges)
 LXC_NETWORK_CREATE_OPTS=
