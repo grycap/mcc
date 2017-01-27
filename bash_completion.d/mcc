@@ -68,7 +68,7 @@ _mcc() {
 			shift
 		done
 		if [ $found == "False" ]; then
-			CLUSTERS="$(lxc list | grep 'mcc-' | sed -n 's/^.* \(mcc-[0-9a-f]*\) .*$/\1/p')"
+			CLUSTERS="$(lxc list | grep 'mcc-' | sed -n 's/^.* \(mcc-[0-9a-zA-Z_]*\) .*$/\1/p')"
 		fi
 	}
 	_list() {

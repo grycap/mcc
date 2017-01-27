@@ -29,7 +29,7 @@ function _NAMING__nodename_valid() {
     local N_NAME=$1
 
     # If it matches our naming scheme, it is valid
-    if [[ "$N_NAME" =~ ^$CONTAINER_PREFIX[a-f0-9]*-node[0-9]*$ ]]; then
+    if [[ "$N_NAME" =~ ^$CONTAINER_PREFIX[a-zA-Z_0-9]*-node[0-9]*$ ]]; then
         return 0
     fi
 
@@ -42,7 +42,7 @@ function _NAMING__clustername_valid() {
     local N_NAME=$1
 
     # If it matches our naming scheme, it is valid
-    if [[ "$N_NAME" =~ ^$CONTAINER_PREFIX[a-f0-9]*$ ]]; then
+    if [[ "$N_NAME" =~ ^$CONTAINER_PREFIX[a-zA-Z_0-9]*$ ]]; then
         return 0
     fi
 
@@ -55,13 +55,13 @@ function _NAMING__clustername_from_nodename() {
     local N_NAME=$1
 
     # This is the case in which the nodename is the frontend
-    if [[ "$N_NAME" =~ ^$CONTAINER_PREFIX[a-f0-9]*$ ]]; then
+    if [[ "$N_NAME" =~ ^$CONTAINER_PREFIX[a-zA-Z_0-9]*$ ]]; then
         echo "$N_NAME"
         return 0
     fi
 
     # This is the case in which the nodename is a working node
-    if [[ "$N_NAME" =~ ^$CONTAINER_PREFIX[a-f0-9]*-node[0-9]*$ ]]; then
+    if [[ "$N_NAME" =~ ^$CONTAINER_PREFIX[a-zA-Z_0-9]*-node[0-9]*$ ]]; then
         echo "${N_NAME%-node*}"
         return 0
     fi
