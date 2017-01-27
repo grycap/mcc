@@ -97,18 +97,19 @@ function delete() {
     local ALL=False
 
     _HELP__reset_help
+    _HELP__append_description "Deletes a cluster and also deletes the nodes that are part from the cluster."
     _HELP__add_help_cmd "<name>" "name of the cluster"
     _HELP__add_help_cmd "--no-delete-network|-n" "no deletes the network in the case that there are not any container using it (default: deletes the network)"
     _HELP__add_help_cmd "--force|-f" "deletes the front-end even if any of the working nodes could not be deleted (default: fail if a node could not be stopped)"
     _HELP__add_help_cmd "--help|-h" "shows this help and exists"
-    _HELP__add_help_cmd "--all|-A" "deletes all the clusters"
+    _HELP__add_help_cmd "--all|-a" "deletes all the clusters"
 
     while (( $# > 0 )); do
         case "$1" in
-            --no-delete-network|-n)        DELETENETWORK=False;;
+            --no-delete-network|-n)     DELETENETWORK=False;;
             --force|-f)                 FORCE=True;;
             --help|-h)                  _HELP__usage delete && exit 0;;
-            --all|-A)                   ALL=True;;
+            --all|-a)                   ALL=True;;
             *)  if [ "$CLUSTERNAME" == "" ]; then 
                     CLUSTERNAME="$1"
                 else

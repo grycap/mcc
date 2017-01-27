@@ -1,0 +1,170 @@
+#!/bin/bash
+#
+# MCC - My Container Cluster
+# https://github.com/dealfonso/my_container_cluster
+#
+# Copyright (C) GRyCAP - I3M - UPV 
+# Developed by Carlos A. caralla@upv.es
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+_mcc() {
+	function sanitize() {
+		echo "$1" | sed -e 's/[]\/$*.^|[]/\\&/g'
+	}
+	function remove_from_list() {
+		local to_remove=$1
+		local list=$2
+
+		while read -d ' ' w; do
+			w=$(sanitize "$w")
+			list="$(echo "$list" | sed "s/\\([[:blank:]]\\|^\\)$w\\([[:blank:]]\\|\$\\)/\1\2/")"
+		done <<< "${to_remove} "
+		echo "$list"
+	}
+	_is_cluster() {
+		if [ "${1:0:4}" == "mcc-" ]; then
+			return 0
+		fi
+		return 1
+	}
+	_is_node_of() {
+		local n_name=$1
+		local c_name=$2
+		local l_c_name=${#c_name}
+		if _is_cluster "$c_name"; then
+			l_c_name=$((l_c_name+5))
+			if [ "${n_name:0:$l_c_name}" == "${c_name}-node" ]; then
+				return 0
+			fi
+		fi
+		return 1
+	}
+	_get_nodes() {
+		NODES="$(lxc list | grep "${1}-node.*\$" | awk '{print $2}') "
+	}
+	_get_clusters() {
+		local found=False
+		local i
+		local c_name
+		for ((i=$1;i<$COMP_CWORD;i++)); do
+			c_name="${COMP_WORDS[i]}"
+			if _is_cluster "$c_name"; then
+				found=True
+				CLUSTERNAME="$c_name"
+				break
+			fi
+			shift
+		done
+		if [ $found == "False" ]; then
+			CLUSTERS="$(lxc list | grep 'mcc-' | sed -n 's/^.* \(mcc-[0-9a-f]*\) .*$/\1/p')"
+		fi
+	}
+	_list() {
+		COMPREPLY=( $(compgen -W "$(remove_from_list "$parameters" "--show-nodes -N --silent -s --help -h")" -- "$cur"))
+	}
+	_enter() {
+		local CLUSTERS
+		_get_clusters $1
+		COMPREPLY=($(compgen -W "$(remove_from_list "$parameters" "--delete-on-exit -D --help -h $CLUSTERS")" -- "$cur")) 
+	}
+	_addnode() {
+		local CLUSTERS FOLDERS options CLUSTERNAME NODES
+		case "$prev" in
+			--context-folder|-c)	
+				COMPREPLY=($(compgen -o plusdirs -- "$cur" ));;
+			--node-count|-n|--working-node-image|-w|--device|-d) ;;
+
+			*)	_get_clusters $1
+				if [ "$CLUSTERS" != "" ]; then
+					options="--help "
+				else
+					options="--node-count -n --working-node-image -w --device -d --context-folder -c --enter-cluster -e --help -h"
+				fi
+				options="$(remove_from_list "$parameters" "$options")"
+				COMPREPLY=($(compgen -W "$options $CLUSTERS $FOLDERS" -- "$cur"));;
+		esac
+	}
+	_create() {
+		local CLUSTERS FOLDERS options
+		case "$prev" in
+			--context-folder|-c|--context-folder-wn|-C)	
+				COMPREPLY=($(compgen -o plusdirs -- "$cur" ));;
+			--front-end-image|-f|--working-node-image|-w|--nodes|-n|--device|-d)
+				;;
+			*)
+				COMPREPLY=($(compgen -W "$(remove_from_list "$parameters" "--delete-on-exit --front-end-image -f --working-node-image -w --nodes -n --device -d --context-folder -c --context-folder-wn -C --help -h")" -- "$cur"));;
+		esac
+	}
+	_delete() {
+		local CLUSTERS
+		_get_clusters $1
+		local options
+		if [ "$CLUSTERS" != "" ]; then
+			options="--all -a --help -h"
+		else
+			options="--no-delete-network -n -f --force --help -h"
+		fi
+		options="$(remove_from_list "$parameters" "$options")"
+		COMPREPLY=($(compgen -W "$options $CLUSTERS" -- "$cur"))
+	}
+	_delnode() {
+		local CLUSTERS
+		local NODES
+		_get_clusters $@
+		local options
+		if [ "$CLUSTERS" == "" ]; then
+			options="$(remove_from_list "$parameters" "--all -a")"
+			if [ "$CLUSTERNAME" != "" ]; then
+				_get_nodes "$CLUSTERNAME"
+				local i n_name
+				for ((i=$1;i<COMP_CWORD;i++)); do
+					n_name="${COMP_WORDS[i]}"
+					if _is_node_of "$n_name" "$CLUSTERNAME"; then
+						NODES="$(echo "$NODES" | grep -v "$n_name")"
+					fi
+				done
+				NODES="$(echo "$NODES" | tr '\n' ' ')"
+			fi
+		fi
+
+		local WORDS="$(remove_from_list "$parameters" "$options $CLUSTERS $NODES --help -h")"
+		COMPREPLY=($(compgen -W "$options $CLUSTERS $NODES" -- "$cur"))
+	}
+	local cur prev parameters
+	cur=${COMP_WORDS[COMP_CWORD]}
+	prev=${COMP_WORDS[COMP_CWORD-1]}
+	parameters="${COMP_WORDS[@]}"
+
+	local n COMMAND PARAM CLUSTER
+	n=0
+	COMMAND=
+	CLUSTER=
+	while ((n<COMP_CWORD)); do
+		PARAM="${COMP_WORDS[n]}"
+		case "$PARAM" in
+			delnode|enter|list|addnode|create|delete) 
+				COMMAND="$PARAM"
+				((n++))
+				break;;
+		esac
+		((n++))
+	done
+	if [ "$COMMAND" != "" ]; then
+		_$COMMAND "$n"
+	else
+		COMPREPLY=( $( compgen -W '--no-undo --verbose --help delnode addnode list create delete enter' -- "$cur" ))
+	fi
+	return 0
+}

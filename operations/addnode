@@ -56,12 +56,14 @@ function addnode() {
     local DEVICES=
 
     _HELP__reset_help
-    _HELP__add_help_cmd "--node-count|-n <number>" "number of nodes to be added"
+    _HELP__append_description "Adds one or more nodes to a cluster. The script add-node is invoked in the cluster, once the container has been launched and it has an IP address."
+    _HELP__add_help_cmd "<cluster name>" "name of the cluster to which the node is going to be added to"
     _HELP__add_help_cmd "--working-node-image|-w <image>" "image to be used for the container"
+    _HELP__add_help_cmd "--context-folder|-c" "folder that contains the scripts to be executed on contextualization in the working node"
+    _HELP__add_help_cmd "--device|-d" "adds a device to the container ($(_DEVICE__get_available))"
+    _HELP__add_help_cmd "--node-count|-n <number>" "number of nodes to be added"
     _HELP__add_help_cmd "--enter-cluster|-e" "enters in the cluster once added the last host"
     _HELP__add_help_cmd "--help|-h" "shows this help and exists"
-    _HELP__add_help_cmd "--device|-d" "adds a device to the container ($(_DEVICE__get_available))"
-    _HELP__add_help_cmd "<cluster name>" "name of the cluster to which the node is going to be added to"
     while (( $# > 0 )); do
         case "$1" in
             --enter-cluster|-e) ENTER=True;;

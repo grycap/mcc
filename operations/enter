@@ -24,6 +24,7 @@ function enter() {
     local DELETE=
 
     _HELP__reset_help
+    _HELP__append_description "Gets a shell to the cluster. It tries to use some of the following shells: $MCC_SHELLS"
     _HELP__add_help_cmd "--help|-h" "shows this help and exists"
     _HELP__add_help_cmd "--delete-on-exit|-D" "deletes the cluster once the session has finished"
     _HELP__add_help_cmd "<cluster name>" "name of the cluster in which to enter"

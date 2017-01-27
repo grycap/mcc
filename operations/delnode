@@ -25,9 +25,11 @@ function delnode() {
     local ALL=False
 
     _HELP__reset_help
+    _HELP__append_description "Removes one or more nodes from a cluster. The script remove-node is invoked in the cluster, prior to deleting the container."
     _HELP__add_help_cmd "<cluster name>" "name of the cluster to which the node is going to be added to"
     _HELP__add_help_cmd "<node1>..<nodeN>" "name of the nodes to delete"
     _HELP__add_help_cmd "--all|-a" "delete all the nodes of the cluster (except the front-end)"
+    _HELP__add_help_cmd "--help|-h" "shows this help and exists"    
     while (( $# > 0 )); do
         case "$1" in
             --all|-a)        ALL=True;;
