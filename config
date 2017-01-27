@@ -40,6 +40,10 @@ MCC_ETC_REMOTE_FOLDER="/etc/mcc/"
 MAXNODES=100
 # Possible shells in the container (for the option --enter-cluster)
 MCC_SHELLS="bash sh"
+# File in which is stored specific for the global system
+MCC_ETC_CONFIG=/etc/mcc/mcc.conf
+# File in which is stored the user specific configuration
+MCC_ETC_USER="${HOME}/.mcc/mcc.conf"
 
 # DEVICES - devices-related variables
 
@@ -61,6 +65,6 @@ MCC_DEVICES_SHAREDFOLDER_REMAP_PERMISSIONS=True
 # * this is specially useful to include the profile to be used (e.g. the default profile already has a NIC that will not be useful for us
 #   because we want our FIRST NIC to connect then cluster)
 # In order to be easier to launch containers, I enable to get the options from a variable in env
-LXC_LAUNCH_OPTS=${MCC_LXC_LAUNCH_OPTS:-"-p mcc"}
+LXC_LAUNCH_OPTS=${MCC_LXC_LAUNCH_OPTS:-""}
 # Additional options to be included when creating a network (is of special interest to attach to specific bridges)
 LXC_NETWORK_CREATE_OPTS=

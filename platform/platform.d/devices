@@ -432,7 +432,17 @@ function _DEVICE__sharedfolder_dispose() {
     # - that can be translated into the fact that the cluster does not exist
     if ! _CLUSTER__exists "$CLUSTERNAME"; then
         p_debug "There are not any container using the folder $D_ID so we are removing it"
-        rm -rf "$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
+
+        if [ "$MCC_DEVICES_SHAREDFOLDER_REMAP_PERMISSIONS" == "True" ]; then
+            p_warning "You will probably be asked to provide sudo password (to remove the folder $MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID)"
+
+            # This is just to test that sudo is working and that the user enters the password
+            sudo rm --version > /dev/null 2> /dev/null
+            sudo rm -rf "$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
+            sudo -K
+        else
+            rm -rf "$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
+        fi
     fi
     return 0
 }

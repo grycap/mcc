@@ -24,6 +24,9 @@ declare CMD_DESC=()
 _DESCRIPTION=
 
 COLUMNS=$(tput cols)
+if ((COLUMNS>120)); then
+    COLUMNS=120
+fi
 _HELP__MAXWIDTH=${COLUMNS:-80}
 if ((_HELP__MAXWIDTH<60)); then
     _HELP__MAXWIDTH=60
@@ -99,10 +102,11 @@ function _HELP__show_help() {
     done
 
     # Then output the command using the format function
+    echo
     for ((i=0; i<${#CMD_CMD[@]}; i++)); do
-        echo
         _HELP__fmt_command_out $((max_width+2)) "${CMD_CMD[$i]} -" "${CMD_DESC[$i]}"
     done
+    echo
 }
 
 function _HELP__fmt_command_out() {
