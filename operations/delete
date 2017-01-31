@@ -86,7 +86,7 @@ function delete_cluster() {
         done <<< "$NETWORKS"
     fi    
 
-    p_out "cluster $CLUSTERNAME successfully deleted"
+    p_out "$CLUSTERNAME successfully deleted"
     return 0
 }
 

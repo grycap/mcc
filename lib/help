@@ -23,7 +23,8 @@ declare CMD_CMD=()
 declare CMD_DESC=()
 _DESCRIPTION=
 
-COLUMNS=$(tput cols)
+COLUMNS=$(tput cols 2> /dev/null)
+COLUMNS=${COLUMNS:-120}
 if ((COLUMNS>120)); then
     COLUMNS=120
 fi

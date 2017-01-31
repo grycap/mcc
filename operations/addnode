@@ -152,7 +152,7 @@ echo \"$PUBKEY\" > ~/.ssh/authorized_keys"
             return 1
         fi
 
-        p_out "node $NODENAME successfully added to the cluster"
+        p_out "$NODENAME successfully added to $CLUSTERNAME"
     done
 
     if [ "$ENTER" == "True" ]; then

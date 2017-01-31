@@ -164,7 +164,9 @@ _mcc() {
 	if [ "$COMMAND" != "" ]; then
 		_$COMMAND "$n"
 	else
-		COMPREPLY=( $( compgen -W '--no-undo --verbose --help delnode addnode list create delete enter' -- "$cur" ))
+		COMPREPLY=( $( compgen -W '--no-undo -N --quiet -q --verbose -v --help delnode addnode list create delete enter' -- "$cur" ))
 	fi
 	return 0
 }
+
+complete -o filenames -F _mcc ./mcc mcc

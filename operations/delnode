@@ -112,7 +112,7 @@ function delnode() {
                     FAILED_CURRENT=True
                 fi
                 
-                p_out "node $NODENAME removed from cluster $CLUSTERNAME"
+                p_out "$NODENAME removed from cluster $CLUSTERNAME"
             fi
 
             p_info "disposing devices from $NODENAME"

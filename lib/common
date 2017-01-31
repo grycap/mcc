@@ -112,6 +112,22 @@ function execute_command() {
     return $?
 }
 
+function execute_command_and_log() {
+    #
+    # $ Usage: execute_command_and_log <commandline>
+    #
+    # This function is intended execute one command and output the result using the p_xxx functions (to avoid raw echoes)
+    local OUT RESULT
+    OUT=$($@ 2>&1)
+    RESULT=$?
+    if ((RESULT==0)); then
+        p_debug "$OUT"
+    else
+        p_error "$OUT"
+    fi
+    return $RESULT
+}
+
 function retry_while() {
     #
     # $ Usage: retry_while <max retries> <output string to retry> commandline
@@ -271,7 +287,9 @@ function p_debug() {
 }
 
 function p_info() {
-    echo "[INFO] $@"
+    if [ "$QUIET" != "True" ]; then
+        echo "[INFO] $@"
+    fi
 }
 
 function p_out() {
@@ -279,11 +297,15 @@ function p_out() {
 }
 
 function p_error() {
-    echo -e "[\e[31mERROR\e[0m] $@" >&2
+    if [ "$QUIET" != "True" ]; then
+        echo -e "[\e[31mERROR\e[0m] $@" >&2
+    fi
 }
 
 function p_warning() {
-    echo -e "[\e[33mWARNING\e[0m] $@" >&2
+    if [ "$QUIET" != "True" ]; then
+        echo -e "[\e[33mWARNING\e[0m] $@" >&2
+    fi
 }
 
 function p_error_s() {

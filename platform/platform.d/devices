@@ -165,7 +165,7 @@ function _MCC__devices_connect() {
     FAILED=$?
 
     if ((FAILED>0)); then
-        p_error "failed to prepare $FAILED devices"
+        p_error "failed to connect $FAILED devices"
         return 1
     fi
 
@@ -293,14 +293,14 @@ function _DEVICE__syspath_connect() {
     __read_vars "$@"
 
     # Finally add the device to the server
-    lxc config device add "$C_NAME" "$D_ID" disk path="/$D_ID" source="/$D_ID"
+    execute_command_and_log lxc config device add "$C_NAME" "$D_ID" disk path="/$D_ID" source="/$D_ID"
 }
 function _DEVICE__syspath_disconnect() {
     local C_NAME D_ID D_INFO CLUSTERNAME
     __read_vars "$@"
 
     # Remove the device from the container
-    lxc config device remove "$C_NAME" "$D_ID"
+    execute_command_and_log lxc config device remove "$C_NAME" "$D_ID"
 }
 function _DEVICE__syspath_dispose() {
     local C_NAME D_ID D_INFO CLUSTERNAME
@@ -415,14 +415,14 @@ function _DEVICE__sharedfolder_connect() {
     fi
 
     # Finally add the device to the server
-    lxc config device add "$C_NAME" "$D_ID" disk path="/$D_ID" source="$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
+    execute_command_and_log lxc config device add "$C_NAME" "$D_ID" disk path="/$D_ID" source="$MCC_SHAREDFOLDER_PATH/$CLUSTERNAME/$D_ID"
 }
 function _DEVICE__sharedfolder_disconnect() {
     local C_NAME D_ID D_INFO CLUSTERNAME
     __read_vars "$@"
 
     # Remove the device from the container
-    lxc config device remove "$C_NAME" "$D_ID"
+    execute_command_and_log lxc config device remove "$C_NAME" "$D_ID"
 }
 function _DEVICE__sharedfolder_dispose() {
     local C_NAME D_ID D_INFO CLUSTERNAME
