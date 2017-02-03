@@ -228,12 +228,14 @@ function _CONTAINER__stop() {
 
     local ERR
     local RESULT
-    RESULT=$(execute_command lxc stop "$C_NAME" 2>&1)
+    # RESULT=$(execute_command lxc stop "$C_NAME" 2>&1)
+    execute_command_and_log lxc stop "$C_NAME"
     ERR=$?
     if (( ERR == 0 )); then
         p_debug "container successfully stopped"
+        execute_command_and_log lxc delete "$C_NAME"
     else
-        p_error "failed to stop container ($RESULT)"
+        p_error "failed to stop container"
     fi
     return $ERR
 }
@@ -253,11 +255,12 @@ function _CONTAINER__launch() {
     _NETWORK__ensure_exists "$C_NETWORK" "True" || return 2
     _CONTAINER__ensure_image_exists "$C_IMAGE" || return 3
 
-    execute_command lxc launch -n "$C_NETWORK" -e $C_IMAGE "$C_NAME" "$LXC_LAUNCH_OPTS" > /dev/null
+    execute_command_and_log lxc launch -n "$C_NETWORK" $C_IMAGE "$C_NAME" "$LXC_LAUNCH_OPTS"
     if (( $? == 0 )); then
         p_debug "container $C_NAME successfully launched"
         # As we are using ephemeral containers, we do not need to delete them
         _UNDO__add_undo_cmdline lxc stop "$C_NAME"
+        _UNDO__add_undo_cmdline lxc delete "$C_NAME"
         return 0
     else
         return 4

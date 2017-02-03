@@ -73,7 +73,7 @@ function __devices_invoke() {
         if [ "$DEVICE" != "" ]; then
             FNC_NAME="_DEVICE__${DEVICE}_${OP}"
             p_debug "op $OP on device $DEVICE: $FNC_NAME $PARAMETERS"
-            $FNC_NAME "$C_NAME" "$PARAMETERS"
+            execute_command_and_log $FNC_NAME "$C_NAME" "$PARAMETERS"
             if (($?!=0)); then
                 ((FAILED++))
             fi
@@ -308,6 +308,46 @@ function _DEVICE__syspath_dispose() {
     return 0
 }
 
+function _DEVICE__gpu_prepare() {
+    #
+    # Type of device gpu
+    #   the ID is the gpu to connect (gpu0)
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+
+    D_ID=${D_ID:-gpu0}
+
+    # In this implementation we are not testing whether it is a folder or not, so
+    if [ ! -c "/dev/$D_ID" ]; then
+        p_error "cannot use $D_ID because it is not of type character special"
+        return 2
+    fi
+    return 0
+}
+function _DEVICE__gpu_connect() {
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+
+    D_ID=${D_ID:-gpu0}
+
+    # Finally add the device to the server
+    execute_command_and_log lxc config device add "$C_NAME" "$D_ID" gpu
+}
+function _DEVICE__gpu_disconnect() {
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+
+    D_ID=${D_ID:-gpu0}
+
+    # Remove the device from the container
+    execute_command_and_log lxc config device remove "$C_NAME" "$D_ID"
+}
+function _DEVICE__gpu_dispose() {
+    local C_NAME D_ID D_INFO CLUSTERNAME
+    __read_vars "$@"
+    return 0
+}
+
 #-----------------------------------------------------------------------------------------
 #
 # DEVICE:
@@ -348,6 +388,8 @@ function _remap_sharedfolder() {
     local R_FOLDER="$2"
     local L_FOLDER="$3"
     local PERMISSIONS_LINES PERMISSION_STR uid gid mask
+
+    p_warning "calling this function before other device may cause that the other device does not work"
 
     # Get the owners of the folders in the container (it will get lines with the format "uid:gid:mask /path/to folder/with spaces")
     PERMISSIONS_LINES=$(_CONTAINER__execute "$C_NAME" bash -c "find '$R_FOLDER' -type d -mindepth 1 -maxdepth 2 -printf '%U:%G:%m %P\n' 2> /dev/null")
