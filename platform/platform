@@ -598,7 +598,7 @@ function _NETWORK__get_node_ip() {
     # Then we check which is the IP address of that device
     local IP_ADDR
     output_to_var_or_fail IP_ADDR "failed to obtain the IP address for device $DEVICE from container $C_NAME" \
-        eval "$CURL_CMD/1.0/containers/$C_NAME/state -XGET | jq '.metadata.network[\"$DEVICE\"].addresses[] | select(.\"family\"==\"inet\") | .address'" ||
+        eval "$CURL_CMD/1.0/containers/$C_NAME/state -XGET | jq '.metadata.network[\"$DEVICE\"].addresses[] | select(.\"family\"==\"inet\") | .address' 2> /dev/null" ||
             return 3
 
     # Finally, show the IP address

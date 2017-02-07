@@ -107,7 +107,7 @@ function _CLUSTER__get_info() {
     local IPS
     local C_NETWORK=$(_NAMING__get_cluster_network_name $CLUSTERNAME)
     output_to_var_or_fail IPS "could obtain the ip addresses associated to $CLUSTERNAME" _NETWORK__get_node_ip "$CLUSTERNAME" "$C_NETWORK" || 
-        return 3
+        IPS="-"
     
     echo "$CLUSTERNAME;$NETWORKS;$IPS;$NODES"
     return 0
