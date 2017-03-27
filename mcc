@@ -81,7 +81,7 @@ contains scripts that will be executed in the 'ls' order (i.e. the same mechanis
 # Add the basic help
 _HELP__add_help_cmd "--help|-h" "shows this help and exits"
 _HELP__add_help_cmd "--no-undo|-N" "does not try to undo the commands"
-_HELP__add_help_cmd "--verbose|-v" "display debug messages"
+_HELP__add_help_cmd "--verbose|-V" "display debug messages"
 _HELP__add_help_cmd "--quiet|-q" "supresses most of messages"
 _HELP__add_help_cmd "list" "lists the clusters that are running"
 _HELP__add_help_cmd "addnode" "adds nodes to one cluster"

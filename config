@@ -36,6 +36,8 @@ MCC_REMOTE_FOLDER="/opt/context/mcc"
 # Path in the container where the contextualization scripts will be stored (those that will be executed on the creation of the node)
 # * warning: this MUST coincide with the path in the file context-node
 MCC_ETC_REMOTE_FOLDER="/etc/mcc/"
+# Name of the file in which the configuration variables are stored
+MCC_VARFILES="cluster.conf"
 # The maximum number of nodes for any cluster (this should be moved to per-cluster)
 MAXNODES=100
 # Possible shells in the container (for the option --enter-cluster)

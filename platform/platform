@@ -422,7 +422,7 @@ function _NETWORK__delete() {
     fi
 
     # Create the network
-    p_info "creating network $NETWORKNAME"
+    p_info "deleting network $NETWORKNAME"
 
     local ERR
     ERR=$(execute_command lxc network delete "$NETWORKNAME" 2>&1)

@@ -51,9 +51,10 @@ function addnode() {
     local CLUSTERNAME=
     local NODECOUNT=1
     local WNIMAGE=local:alpine
-    local CONTEXTFOLDER
+    local CONTEXTFOLDERWN
     local ENTER=False
     local DEVICES=
+    local COPYOPTS=
 
     _HELP__reset_help
     _HELP__append_description "Adds one or more nodes to a cluster. The script add-node is invoked in the cluster, once the container has been launched and it has an IP address."
@@ -73,13 +74,14 @@ function addnode() {
             --working-node-image|-w)    WNIMAGE=$2
                                         shift;;
 
-            --context-folder|-c)        CONTEXTFOLDER=$2
+            --context-folder|-c)        CONTEXTFOLDERWN=$2
                                         shift;;
 
             --device|-d)        DEVICES="$DEVICES$2;"
                                 shift;;
 
             --help|-h)          _HELP__usage addnode && exit 0;;
+            --copy-opts|-C)              COPYOPTS=True;;
 
             *)  if [ "$CLUSTERNAME" == "" ]; then 
                     CLUSTERNAME="$1"
@@ -107,10 +109,24 @@ function addnode() {
         return 3
     p_debug "ip for cluster $CLUSTERNAME is $C_IP"
 
+    if [ "$COPYOPTS" == "True" ]; then
+        p_info "getting config file" 
+
+        TMPFILE=$(create_temp_file)
+        if ! _CONTAINER__download_file "$CLUSTERNAME" "${MCC_ETC_REMOTE_FOLDER}/${MCC_VARFILES}" "$TMPFILE"; then
+            p_error "could not get the original configuration of the cluster"
+            return 4
+        fi
+
+        VARLIST="WNIMAGE CONTEXTFOLDERWN DEVICES"
+        VARGREP="($(echo "$VARLIST" | tr ' ' '|'))="
+        p_debug "using the next variables: $(cat "$TMPFILE" | grep -E "$VARGREP")"
+        eval "$(cat "$TMPFILE" | grep -E "$VARGREP")"
+    fi
+
     # We simply repeat the same method for all the nodes
     local i
     for ((i=0;i<NODECOUNT;i++)); do
-
         # We need a name for the new node
         p_debug "creating a new name for the working node"
         local NODEID
@@ -125,7 +141,7 @@ function addnode() {
         _MCC__devices_prepare "$NODENAME" "$DEVICES" || return 4
 
         # Finally we will launch the container
-        if ! _MCC__launch_container "$NODENAME" "$WNIMAGE" "$CONTEXTFOLDER"; then
+        if ! _MCC__launch_container "$NODENAME" "$WNIMAGE" "$CONTEXTFOLDERWN"; then
             p_error "failed to launch node $NODENAME ($?)"
             return 5
         fi

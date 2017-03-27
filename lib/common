@@ -19,6 +19,34 @@
 # limitations under the License.
 #
 
+function create_temp_folder() {
+    #
+    # $ Usage: create_temp_folder
+    #
+    # creates a temporary folder
+    local FNAME
+    FNAME=$(mktemp -d)
+    while (($?!=0)); do
+        FNAME=/tmp/mcc$(date +%s)
+        mkdir -p "$FNAME"
+    done
+    echo "$FNAME"
+}
+
+function create_temp_file() {
+    #
+    # $ Usage: create_temp_file
+    #
+    # creates a temporary file
+    local FNAME
+    FNAME=$(mktemp)
+    while (($?!=0)); do
+        FNAME=/tmp/mcc$(date +%s)
+        touch "$FNAME"
+    done
+    echo "$FNAME"
+}
+
 function sanitize_for_sed() {
     #
     # $ Usage: sanitize_for_sed <word>
@@ -26,7 +54,6 @@ function sanitize_for_sed() {
     # escapes the needed characters to be used inside a sed expression
     echo "$1" | sed -e 's/[]\/$*.^|[]/\\&/g'
 }
-
 
 function remove_from_list() {
     #

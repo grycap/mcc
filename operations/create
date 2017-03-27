@@ -30,6 +30,8 @@ function create() {
     local DELETE
     local DEVICES
     local CONTEXTFOLDERWN
+    local VARLIST
+    local TMPFOLDER
 
     _HELP__reset_help
     _HELP__append_description "Creates a cluster, and also creates a dedicated network that will be used to connect the nodes from the cluster. \
@@ -105,6 +107,24 @@ the corresponding number of working nodes."
 
     # We have managed to launch the cluster!
     p_out "$CLUSTERNAME successfully created"
+
+    # Now we will create a file in which the variables used to create the cluster are stored
+    p_debug "generating config file" 
+    VARLIST="FRONTENDIMAGE WNIMAGE CONTEXTFOLDER CONTEXTFOLDERWN NODECOUNT DEVICES ENTERCLUSTER DELETE"
+    TMPFOLDER=$(create_temp_folder)
+    for VARNAME in $VARLIST; do
+        echo "$VARNAME=\"${!VARNAME}\""
+    done > "$TMPFOLDER/${MCC_VARFILES}"
+
+    # Now we will upload the variables file to the container
+    if ! _CONTAINER__upload_file "$CLUSTERNAME" "$TMPFOLDER/${MCC_VARFILES}" "${MCC_ETC_REMOTE_FOLDER}"; then
+        p_error "could not upload the variables file"
+        return 1
+    fi
+    rm -f "$TMPFOLDER/${MCC_VARFILES}" 2> /dev/null > /dev/null
+    if (($?!=0)); then
+        p_warning "file $TMPFOLDER/${MCC_VARFILES} could not be deleted and contains the information about the cluster" 
+    fi
 
     p_debug "connecting devices"
     _MCC__devices_connect "$CLUSTERNAME" "$DEVICES" || return 4
