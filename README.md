@@ -49,6 +49,14 @@ $ ./mcc create --help
 ## MCC and LXD
 MCC is currently very tightened to LXD, but it will be easy to implement some functions to integrate with e.g. Docker (see section 'Internals').
 
+You will require a recent version of LXC and LXD. In particular, LXC v2.0.8 shipped with Ubuntu 16.04 does not support the required ``lxc network`` command. You can upgrade to the latest version of LXC and LXD with the commands:
+```
+sudo add-apt-repository ppa:ubuntu-lxc/lxc-stable
+sudo add-apt-repository ppa:ubuntu-lxc/lxd-stable
+sudo apt-get update
+sudo apt-get upgrade lxc lxd
+```
+
 Anyway, it is advisable that you create a profile dedicated to _mcc_, in order to be able to manage the features of the containers. E.g. the _default_ profile contains a network device in _eth0_ and that will make that _mcc_ will not work. So it is recommended to create a profile named mcc:
 
 ```bash
