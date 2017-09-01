@@ -31,6 +31,9 @@ $ ./mcc create --front-end-image images:alpine/3.4 --working-node-image images:a
 ```
 This example creates an alpine-based cluster with one front-end and two computing nodes, it contextualizes the nodes by installing a ssh server (using the scripts provided in the MCC distro), and creates a shared /home folder accesible by all the nodes.
 
+## Full ASCIINEMA session to install MCC and to create a cluster
+[![MCC Install session](https://asciinema.org/a/eub9urzlhdz3k4h4z1rmr1uvc.png)](https://asciinema.org/a/eub9urzlhdz3k4h4z1rmr1uvc)
+
 ## Functions
 The functions included in mcc are:
 
