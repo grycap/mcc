@@ -31,6 +31,28 @@ $ ./mcc create --front-end-image images:alpine/3.4 --working-node-image images:a
 ```
 This example creates an alpine-based cluster with one front-end and two computing nodes, it contextualizes the nodes by installing a ssh server (using the scripts provided in the MCC distro), and creates a shared /home folder accesible by all the nodes.
 
+## Full working examples from scratch
+
+### Creating a simple cluster from scratch
+
+In order to create a simple cluster from scratch, you can follow the next steps:
+
+(from a fresh installation of Ubuntu Server 16.04.1 with the default options, with just a OpenSSH server installed)
+
+1. sudo add-apt-repository ppa:ubuntu-lxc/lxd-stable
+2. sudo apt-get update
+3. sudo apt-get install -y git jq lxd bsdmainutils curl
+4. lxd init
+5. git clone https://github.com/grycap/mcc
+6. cd mcc
+7. lxc profile create mcc && lxc profile device add mcc disk disk path=/ pool=default
+8. echo "" >> config && echo "LXC_LAUNCH_OPTS='-p mcc' >> config
+9. ./mcc -V create --front-end-image ubuntu:x --device home --nodes 2 --enter-cluster
+10. su - ubuntu
+11. ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -P ""
+12. cp .ssh/id_rsa.pub .ssh/authorized_keys
+13. ssh node1
+
 ## Full ASCIINEMA session to install MCC and to create a cluster
 [![MCC Install session](https://asciinema.org/a/eub9urzlhdz3k4h4z1rmr1uvc.png)](https://asciinema.org/a/eub9urzlhdz3k4h4z1rmr1uvc)
 

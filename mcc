@@ -42,11 +42,23 @@ function check_dependencies() {
         return 3
     fi
 
+    lxc network list > /dev/null 2>/dev/null
+    if (($?!=0)); then
+        p_error "lxd needs a version in which the command lxc network works. Perhaps you should install the latest stable in the ppa repository (try add-apt-repository ppa:ubuntu-lxc/lxd-stable)"
+        return 4
+    fi
+    
+    echo | column > /dev/null 2>/dev/null
+    if (($?!=0)); then
+        p_error "you need to install the column application (in bsdmainutils ubuntu package)"
+        return 5
+    fi
+
     # Finally check the CURL command (the CURL command points to the lxd endpoint)
     $CURL_CMD > /dev/null 2> /dev/null
     if (($?!=0)); then
         p_error "could not contact to the lxd server using curl (needs curl version 7.45 or later)"
-        return 4
+        return 6
     fi
     return 0
 }

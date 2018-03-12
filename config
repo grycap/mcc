@@ -20,6 +20,7 @@
 # COMMON - general variables: path, etc.
 # Commandline to access to the lxd daemon
 CURL_CMD="curl -sf --unix-socket /var/lib/lxd/unix.socket http:"
+CURL_CMD="curl -sf --unix-socket /var/snap/lxd/common/lxd/unix.socket http:"
 # MCC path where the basic contextualizacion for the front-end is stored (e.g. creation of shared keys for passwordless ssh)
 MCC_FRONTEND_CONTEXT="$(dirname $0)/context/front-end"
 # Names of the executables that will be executed on each corresponding action (i.e. launch the node, add a node to the cluster, remove a node from the cluster)
