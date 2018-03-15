@@ -21,10 +21,7 @@
 [ "$__INCLUDES_INCLUDED__" != "" ] && return
 __INCLUDES_INCLUDED__=True
 
-MCC_FOLDER=${MCC_FOLDER:-$(dirname $0)}
-source "$MCC_FOLDER/config"
-[ -e "$MCC_ETC_CONFIG" ] && source "$MCC_ETC_CONFIG"
-[ -e "$MCC_ETC_USER" ] && source "$MCC_ETC_USER"
+source "$MCC_FOLDER/version"
 source "$MCC_FOLDER/lib/common"
 source_folder "$MCC_FOLDER/operations"
 source_folder "$MCC_FOLDER/lib"

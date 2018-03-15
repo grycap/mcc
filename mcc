@@ -18,7 +18,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-source $(dirname $0)/includes
+
+# File in which is stored specific for the global system
+MCC_ETC_CONFIG=/etc/mcc/mcc.conf
+# File in which is stored the user specific configuration
+MCC_ETC_USER="${HOME}/.mcc/mcc.conf"
+# Specific configuration in current folder
+MCC_ETC_CURRENT="./mcc.conf"
+
+[ -e "$MCC_ETC_CONFIG" ] && source "$MCC_ETC_CONFIG"
+[ -e "$MCC_ETC_USER" ] && source "$MCC_ETC_USER"
+[ -e "$MCC_ETC_CURRENT" ] && source "$MCC_ETC_CURRENT"
+
+MCC_FOLDER=${MCC_FOLDER:-$(dirname $0)}
+
+source $MCC_FOLDER/includes
 
 function check_dependencies() {
     # We need jq installed
@@ -44,7 +58,7 @@ function check_dependencies() {
 
     lxc network list > /dev/null 2>/dev/null
     if (($?!=0)); then
-        p_error "lxd needs a version in which the command lxc network works. Perhaps you should install the latest stable in the ppa repository (try add-apt-repository ppa:ubuntu-lxc/lxd-stable)"
+        p_error "lxd needs a version in which the command lxc network works. Perhaps you should install the latest stable in the ppa repository (try apt install -t xenial-backports lxd lxd-client)"
         return 4
     fi
     
@@ -95,6 +109,7 @@ _HELP__add_help_cmd "--help|-h" "shows this help and exits"
 _HELP__add_help_cmd "--no-undo|-N" "does not try to undo the commands"
 _HELP__add_help_cmd "--verbose|-V" "display debug messages"
 _HELP__add_help_cmd "--quiet|-q" "supresses most of messages"
+_HELP__add_help_cmd "--version|-v" "shows the version number"
 _HELP__add_help_cmd "list" "lists the clusters that are running"
 _HELP__add_help_cmd "addnode" "adds nodes to one cluster"
 _HELP__add_help_cmd "create" "creates one cluster"
@@ -112,6 +127,7 @@ while [ $n -lt ${#ARR[@]} -a "$COMMAND" == "" ]; do
         --quiet | -q) QUIET=True;;
         --no-undo | -N) UNDO=False;;
         --verbose | -V) VERBOSE=True;;
+        --version | -v) echo "$VERSION" && exit 0;;
         --help | -h) _HELP__usage "" "$DESC" && exit 0;;
         *) _HELP__usage "" "$DESC" && exit 1;;
     esac
