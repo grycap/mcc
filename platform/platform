@@ -55,6 +55,11 @@ function _MCC__wait_ip_address() {
     C_IP=$(retry_while 10 1 "" _NETWORK__get_node_ip "$C_NAME" "$C_NETWORK")
     if (($?!=0)); then
         p_error "could not get IP address for container $C_NAME"
+        if _NETWORK__node_has_ip "$C_NAME"; then
+                p_error "HINT: the container has IP addresses...
+are you connecting the container to other network (check the profile)
+is your container getting the IP address for any interface? (e.g. dhclient in all the interfaces)"
+        fi
         return 1
     fi
     echo "$C_IP"
@@ -598,10 +603,47 @@ function _NETWORK__get_node_ip() {
     # Then we check which is the IP address of that device
     local IP_ADDR
     output_to_var_or_fail IP_ADDR "failed to obtain the IP address for device $DEVICE from container $C_NAME" \
-        eval "$CURL_CMD/1.0/containers/$C_NAME/state -XGET | jq '.metadata.network[\"$DEVICE\"].addresses[] | select(.\"family\"==\"inet\") | .address' 2> /dev/null" ||
+        eval "$CURL_CMD/1.0/containers/$C_NAME/state -XGET | jq -r '.metadata.network[\"$DEVICE\"].addresses[] | select(.\"family\"==\"inet\") | .address' 2> /dev/null" ||
             return 3
 
     # Finally, show the IP address
-    echo "$IP_ADDR" | tr -d '"'
+    echo "$IP_ADDR"
     return 0    
+}
+
+function _NETWORK__node_has_ip() {
+    # This functions get the ip in a network, for a container (if it is connected), or in any network if not provided any name
+    local C_NAME=$1
+    local N_NAME=$2
+
+    local DEVICE
+    if [ "$N_NAME" != "" ]; then
+        output_to_var_or_fail DEVICE "could not find a device for network $N_NAME in container $C_NAME" \
+            eval "$CURL_CMD/1.0/containers/$C_NAME -XGET | jq  '.metadata.config.\"volatile.$N_NAME.name\"' | tr -d '\"'" || return 1
+
+        if [ "$DEVICE" == "null" ]; then
+            p_debug "unexpectedly node $C_NAME is not attached to network $N_NAME"
+            return 2
+        fi
+    fi
+
+    # Then we check which is the IP address of that device
+    local IP_ADDR
+    local CMD
+    if [ "$DEVICE" != "" ]; then
+        CMD="$CURL_CMD/1.0/containers/$C_NAME/state -XGET | jq -r '.metadata.network[\"$DEVICE\"].addresses[] | select(.\"family\"==\"inet\") | .address' 2> /dev/null"
+    else
+        DEVICE="any"
+        CMD="$CURL_CMD/1.0/containers/$C_NAME/state -XGET | jq -r '.metadata.network[].addresses[] | select(.\"family\"==\"inet\") | select(.\"scope\"!=\"local\") | .address' 2> /dev/null"
+    fi
+
+    output_to_var_or_fail IP_ADDR "failed to obtain the IP address from container $C_NAME (device $DEVICE)" \
+        eval "$CMD" ||
+            return 3
+
+    if [ "$IP_ADDR" != "" ]; then
+        echo "$IP_ADDR"
+        return 0
+    fi
+    return 4
 }
