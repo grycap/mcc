@@ -7,6 +7,50 @@ This is a tool that automates the creation of container based computing clusters
 
 MCC automates all the tasks to create and configure the cluster. So it enables to contextualize the containers to execute a set of commands as the container are created. This enables, as an example, to include a script that installs a ssh-server in the container. Moreover, MCC tweaks the /etc/hosts file to enable an easy communication between the front-end and the working nodes (i.e. using nodeXX names).
 
+## Installation
+
+### From packages
+
+You can install MCC from the **.deb** package in the releases page (or by building it from the `package/deb` folder):
+
+```console
+$ apt update
+$ apt -f install mcc_1.0-beta.1.deb
+```
+
+This command will install it and its dependencies.
+
+### Installing by hand
+
+mcc includes a simple installation system that simply copies the files in the appropriate folders. In that case you should install the dependencies and then obtain the source from github and execute the `INSTALL.sh` script.
+
+```console
+$ apt install bash jq libc-bin coreutils lxd lxd-client bsdmainutils curl
+$ git clone https://github.com/grycap/mcc
+$ cd mcc
+$ ./INSTALL.sh
+```
+
+The script is very simple, and the main tasks that it makes are:
+
+1. copy the configuration files in `/etc`
+1. copy the main command in `/usr/bin` 
+1. copy the needed files in `/usr/share/mcc` folder
+
+Feel free to inspect the `INSTALL.sh` script to check what is it doing.
+
+### Using it in local
+
+It is also possible to use it in a local folder. In that case you can install the dependencies and then simply clone the project, get into the folder and use it:
+
+```console
+$ apt install bash jq libc-bin coreutils lxd lxd-client bsdmainutils curl
+$ git clone https://github.com/grycap/mcc
+$ cd mcc
+$ ./mcc --version
+1.0-beta.1
+```
+
 ## Examples of usage
 A simple run of MCC will be the next:
 
@@ -74,13 +118,13 @@ $ ./mcc create --help
 ## MCC and LXD
 MCC is currently very tightened to LXD, but it will be easy to implement some functions to integrate with e.g. Docker (see section 'Internals').
 
-You will require a recent version of LXC and LXD. In particular, LXC v2.0.8 shipped with Ubuntu 16.04 does not support the required ``lxc network`` command. You can upgrade to the latest version of LXC and LXD with the commands:
+You will require a recent version of LXC and LXD. In particular, LXC v2.0.8 shipped with Ubuntu 16.04 does not support the required ``lxc network`` command. You can upgrade to the latest version of LXC and LXD (in Ubuntu 16.04) with the commands:
 ```
-sudo add-apt-repository ppa:ubuntu-lxc/lxc-stable
-sudo add-apt-repository ppa:ubuntu-lxc/lxd-stable
-sudo apt-get update
-sudo apt-get upgrade lxc lxd
+apt update
+apt install -t xenial-backports lxd lxd-client
 ```
+
+If you are in other system than Ubuntu 16.04, please check the [LXD official repository](https://github.com/lxc/lxd/) to install a recent version of LXD.
 
 Anyway, it is advisable that you create a profile dedicated to _mcc_, in order to be able to manage the features of the containers. E.g. the _default_ profile contains a network device in _eth0_ and that will make that _mcc_ will not work. So it is recommended to create a profile named mcc:
 
