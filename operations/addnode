@@ -50,7 +50,7 @@ function generate_new_node_id() {
 function addnode() {
     local CLUSTERNAME=
     local NODECOUNT=1
-    local WNIMAGE=local:alpine
+    local WNIMAGE="${MCC_DEFAULT_IMAGE_WN}"
     local CONTEXTFOLDERWN
     local ENTER=False
     local DEVICES=
@@ -141,7 +141,7 @@ function addnode() {
         _MCC__devices_prepare "$NODENAME" "$DEVICES" || return 4
 
         # Finally we will launch the container
-        if ! _MCC__launch_container "$NODENAME" "$WNIMAGE" "$CONTEXTFOLDERWN"; then
+        if ! _MCC__launch_container "$NODENAME" "$WNIMAGE" "$MCC_WN_CONTEXT" "$CONTEXTFOLDERWN"; then
             p_error "failed to launch node $NODENAME ($?)"
             return 5
         fi

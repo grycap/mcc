@@ -21,6 +21,13 @@
 [ "$__INCLUDES_INCLUDED__" != "" ] && return
 __INCLUDES_INCLUDED__=True
 
+# MCC path where the default contextualizacion for the front-end and working-nodes are stored (e.g. creation of shared keys for passwordless ssh)
+MCC_FRONTEND_CONTEXT="${MCC_ETC_FOLDER}/context/front-end"
+MCC_WN_CONTEXT="${MCC_ETC_FOLDER}/context/working-node"
+
+# Local path where the previous files are stored
+MCC_LOCAL_FOLDER="${MCC_FOLDER}/context/mcc"
+
 source "$MCC_FOLDER/version"
 source "$MCC_FOLDER/lib/common"
 source_folder "$MCC_FOLDER/operations"

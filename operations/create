@@ -21,7 +21,7 @@
 
 function create() {
     local NODECOUNT=0
-    local FRONTENDIMAGE=local:alpine
+    local FRONTENDIMAGE="${MCC_DEFAULT_IMAGE_FRONTEND}"
     local WNIMAGE
     local CLUSTERNAME
     local NETWORKNAME

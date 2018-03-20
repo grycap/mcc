@@ -265,7 +265,7 @@ function _CONTAINER__launch() {
         p_debug "container $C_NAME successfully launched"
         # As we are using ephemeral containers, we do not need to delete them
         _UNDO__add_undo_cmdline lxc stop "$C_NAME"
-        _UNDO__add_undo_cmdline lxc delete "$C_NAME"
+        _UNDO__add_undo_cmdline lxc delete --force "$C_NAME"
         return 0
     else
         return 4
