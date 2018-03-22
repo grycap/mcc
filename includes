@@ -25,6 +25,9 @@ __INCLUDES_INCLUDED__=True
 MCC_FRONTEND_CONTEXT="${MCC_ETC_FOLDER}/context/front-end"
 MCC_WN_CONTEXT="${MCC_ETC_FOLDER}/context/working-node"
 
+# Command to contact the LXD daemon
+CURL_CMD="${CURL_CMD:-curl -sf --unix-socket $LXD_SOCKET http:}"
+
 # Local path where the previous files are stored
 MCC_LOCAL_FOLDER="${MCC_FOLDER}/context/mcc"
 
