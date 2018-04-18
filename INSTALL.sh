@@ -26,7 +26,7 @@ INSTALLDIR="/usr/share/mcc"
 mkdir -p "${PREFIX}/usr/bin"
 mkdir -p "${PREFIX}/$INSTALLDIR"
 mkdir -p "${PREFIX}/etc/mcc"
-set -x
+
 APPFILES="includes lib operations platform README.md version LICENSE context/mcc"
 for i in $APPFILES; do
   D="${PREFIX}/$INSTALLDIR/$(dirname $i)"
