@@ -138,6 +138,13 @@ done
 # If the dependencies are not met, we will exit
 check_dependencies || exit -1
 
+lxc profile show "$LXC_PROFILE" > /dev/null 2> /dev/null
+if [ $? -ne 0 ]; then
+    p_error "profile $LXC_PROFILE does not exist in lxc (command failed: lxc profile show $LXC_PROFILE)"
+    exit 1
+fi
+LXC_LAUNCH_OPTS="${LXC_LAUNCH_OPTS} -p $LXC_PROFILE"
+
 # Finally execute the proper command
 if [ "$COMMAND" != "" ]; then
     $COMMAND "${ARR[@]:$n}"
