@@ -61,6 +61,51 @@ Description: MCC - My Container Cluster
  It is very useful for cluster testing and prototyping.
 EOF
 
+cat > "${FNAME}/DEBIAN/postinst" <<\EOF
+#!/bin/sh
+lxc profile show mcc-default > /dev/null 2> /dev/null
+if [ $? -ne 0 ]; then
+  lxc profile create mcc-default
+  if [ $? -ne 0 ]; then
+    echo "could not create default profile in lxc" 2>&1
+    exit 1
+  fi
+  lxc profile edit mcc-default <<\EOT
+config:
+  environment.http_proxy: ""
+  user.network_mode: ""
+description: default profile for mcc
+devices:
+  root:
+    path: /
+    pool: default
+    type: disk
+EOT
+  if [ $? -ne 0 ]; then
+    echo "failed to update the default profile in lxc" 2>&1
+    lxc profile delete mcc-default
+    exit 1
+  fi
+fi
+exit 0
+EOF
+
+cat > "${FNAME}/DEBIAN/postrm" <<\EOF
+#!/bin/sh
+lxc profile show mcc-default > /dev/null 2> /dev/null
+if [ $? -eq 0 ]; then
+  lxc profile delete mcc-default
+fi
+exit 0
+EOF
+
+chmod +x "${FNAME}/DEBIAN/postinst"
+chmod +x "${FNAME}/DEBIAN/postrm"
+
+cat > "${FNAME}/DEBIAN/conffiles" <<\EOF
+/etc/mcc/mcc.conf
+EOF
+
 cd "${FNAME}"
 find . -type f ! -regex '.*.hg.*' ! -regex '.*?debian-binary.*' ! -regex '.*?DEBIAN.*' -printf "%P " | xargs md5sum > "DEBIAN/md5sums"
 cd -

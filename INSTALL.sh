@@ -27,17 +27,21 @@ mkdir -p "${PREFIX}/usr/bin"
 mkdir -p "${PREFIX}/$INSTALLDIR"
 mkdir -p "${PREFIX}/etc/mcc"
 
-APPFILES="context/alpine context/front-end context/mcc context/ubuntu includes lib operations platform README.md version LICENSE"
+APPFILES="includes lib operations platform README.md version LICENSE context/mcc"
 for i in $APPFILES; do
-  cp -r "$SRCFOLDER/$i" "${PREFIX}/$INSTALLDIR/$(dirname $i)"
+  D="${PREFIX}/$INSTALLDIR/$(dirname $i)"
+  mkdir -p "$D"
+  cp -r "$SRCFOLDER/$i" "$D"
 done
 
 for i in mcc; do
   cp -r "$SRCFOLDER/$i" "${PREFIX}/usr/bin"
 done
 
-for i in mcc.conf; do
-  cp -r "$SRCFOLDER/$i" "${PREFIX}/etc/mcc"
+for i in etc/mcc/mcc.conf etc/bash_completion.d etc/mcc/context/front-end etc/mcc/context/working-node; do
+  D="${PREFIX}/$(dirname $i)"
+  mkdir -p "$D"
+  cp -r "$SRCFOLDER/$i" "$D"
 done
 
 cat >> "${PREFIX}/etc/mcc/mcc.conf" << EOF
@@ -46,8 +50,13 @@ MCC_FOLDER="$INSTALLDIR"
 EOF
 
 chmod 755 ${PREFIX}/usr/bin/*
-chmod 755 ${PREFIX}/etc/mcc
-chmod 644 ${PREFIX}/etc/mcc/*
+chmod 755 ${PREFIX}/etc
+chmod 755 $(find ${PREFIX}/etc/ -type d)
+chmod 644 $(find ${PREFIX}/etc/ ! -type d)
 chmod 755 ${PREFIX}/$INSTALLDIR
 chmod 755 $(find ${PREFIX}/$INSTALLDIR/ -type d)
 chmod 644 $(find ${PREFIX}/$INSTALLDIR/ ! -type d)
+
+# Adjust permissions for execution
+chmod 755 $(find ${PREFIX}/etc/mcc/context -type f)
+chmod 755 $(find ${PREFIX}/$INSTALLDIR/context -type f)

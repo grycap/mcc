@@ -52,7 +52,7 @@ function _MCC__wait_ip_address() {
     local C_IP
 
     # * cannot use output_to_var_or_fail because of the blank parameters
-    C_IP=$(retry_while 10 1 "" _NETWORK__get_node_ip "$C_NAME" "$C_NETWORK")
+    C_IP=$(retry_while $MCC_RETRIES_WAIT_IP 1 "" _NETWORK__get_node_ip "$C_NAME" "$C_NETWORK")
     if (($?!=0)); then
         p_error "could not get IP address for container $C_NAME"
         if _NETWORK__node_has_ip "$C_NAME"; then
@@ -265,7 +265,7 @@ function _CONTAINER__launch() {
         p_debug "container $C_NAME successfully launched"
         # As we are using ephemeral containers, we do not need to delete them
         _UNDO__add_undo_cmdline lxc stop "$C_NAME"
-        _UNDO__add_undo_cmdline lxc delete "$C_NAME"
+        _UNDO__add_undo_cmdline lxc delete --force "$C_NAME"
         return 0
     else
         return 4

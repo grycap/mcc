@@ -19,8 +19,9 @@
 # limitations under the License.
 #
 
+MCC_ETC_FOLDER=/etc/mcc
 # File in which is stored specific for the global system
-MCC_ETC_CONFIG=/etc/mcc/mcc.conf
+MCC_ETC_CONFIG="${MCC_ETC_FOLDER}/mcc.conf"
 # File in which is stored the user specific configuration
 MCC_ETC_USER="${HOME}/.mcc/mcc.conf"
 # Specific configuration in current folder
@@ -136,6 +137,13 @@ done
 
 # If the dependencies are not met, we will exit
 check_dependencies || exit -1
+
+lxc profile show "$LXC_PROFILE" > /dev/null 2> /dev/null
+if [ $? -ne 0 ]; then
+    p_error "profile $LXC_PROFILE does not exist in lxc (command failed: lxc profile show $LXC_PROFILE)"
+    exit 1
+fi
+LXC_LAUNCH_OPTS="${LXC_LAUNCH_OPTS} -p $LXC_PROFILE"
 
 # Finally execute the proper command
 if [ "$COMMAND" != "" ]; then
